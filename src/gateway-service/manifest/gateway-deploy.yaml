@@ -19,7 +19,7 @@ spec:
     spec:
       containers:
         - name: gateway
-          image: ayari17/gateway:1.0.2
+          image: nasi101/gateway:1.0.2
           envFrom:
             - configMapRef:
                 name: gateway-configmap
