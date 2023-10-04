@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: gateway
+spec:
+  selector:
+    app: gateway
+  type: LoadBalancer  # Change the type to LoadBalancer
+  ports:
+    - port: 8080
+      targetPort: 8080
+      protocol: TCP
