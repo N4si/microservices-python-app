@@ -5,4 +5,4 @@ metadata:
 data:
   MP3_QUEUE: "mp3"
   VIDEO_QUEUE: "video"
-  MONGODB_URI: "mongodb://nasi:nasi1234@mongodb:27017/?authSource=admin&readPreference=secondary&directConnection=true&ssl=false"
+  MONGODB_URI: "mongodb://nasi:nasi1234@3.91.20.14:30005/" #nodeip:nodeport

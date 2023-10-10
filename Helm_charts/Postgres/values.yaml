@@ -1,0 +1,11 @@
+service:
+  name: db
+  port: 5432
+  nodeport: 30003
+
+container:
+  image: postgres
+  env:
+    user: nasi
+    password: cnd2023
+    db: authdb

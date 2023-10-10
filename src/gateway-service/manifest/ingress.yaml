@@ -6,7 +6,7 @@ metadata:
     spec.ingressClassName: addon-http-application-routing
 spec:
   rules:
-    - host: gateway.3001cf25469d4824b0ad.westeurope.aksapp.io
+    - host: a4cc78c7acc09458087ac6a5ab27280c-1518162385.us-east-1.elb.amazonaws.com
       http:
         paths:
           - path: /

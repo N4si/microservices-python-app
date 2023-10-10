@@ -6,7 +6,6 @@ from auth_svc import access
 from storage import util
 from bson.objectid import ObjectId
 from werkzeug.middleware.dispatcher import DispatcherMiddleware
-from prometheus_client import make_wsgi_app, Summary, Counter
 
 server = Flask(__name__)
 
@@ -20,11 +19,6 @@ fs_mp3s = gridfs.GridFS(mongo_mp3.db)
 connection = pika.BlockingConnection(pika.ConnectionParameters(host="rabbitmq", heartbeat=0))
 channel = connection.channel()
 
-REQUEST_TIME = Summary('request_processing_seconds', 'Time spent processing request')
-unauth_count = Counter('unauthorized requests', 'total number of unauthorized requests')
-
-
-@REQUEST_TIME.time()
 @server.route("/login", methods=["POST"])
 def login():
     token, err = access.login(request)
@@ -34,7 +28,6 @@ def login():
     else:
         return err
 
-@REQUEST_TIME.time()
 @server.route("/upload", methods=["POST"])
 def upload():
     access, err = validate.token(request)
@@ -59,7 +52,6 @@ def upload():
     else:
         return "not authorized", 401
 
-@REQUEST_TIME.time()
 @server.route("/download", methods=["GET"])
 def download():
     access, err = validate.token(request)
@@ -87,8 +79,4 @@ def download():
 
 
 if __name__ == "__main__":
-    # server.run(host="0.0.0.0", port=8080)
-    # Add prometheus wsgi middleware to route /metrics requests
-    server.wsgi_app = DispatcherMiddleware(server.wsgi_app, {
-        '/metrics': make_wsgi_app()
-    })
+    server.run(host="0.0.0.0", port=8080)

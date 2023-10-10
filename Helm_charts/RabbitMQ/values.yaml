@@ -1,0 +1,7 @@
+service:
+  name: rabbitmq
+  port: 15672
+
+ingress:
+  class: addon-http-application-routing
+  host: rabbit-mq.gr7.us-east-1.eks.amazonaws.com

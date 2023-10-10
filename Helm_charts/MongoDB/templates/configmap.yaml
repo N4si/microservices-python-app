@@ -7,7 +7,7 @@ data:
     storage:
       dbPath: /data/db
   ensure-users.js: |
-    const targetDbStr = 'test';
+    const targetDbStr = 'mp3';
     const rootUser = cat('/etc/k8-test/admin/MONGO_ROOT_USERNAME');
     const rootPass = cat('/etc/k8-test/admin/MONGO_ROOT_PASSWORD');
     const usersStr = cat('/etc/k8-test/MONGO_USERS_LIST');
@@ -39,7 +39,7 @@ data:
           if (!~customRoles.indexOf(role)) {
             return role;
           }
-          return {role: role, db: 'admin'};
+          return {role: role, db: 'mp3'};
         });
         try {
           targetDb.createUser(userDoc);
