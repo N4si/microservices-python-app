@@ -5,7 +5,7 @@ metadata:
   labels:
     app: notification
 spec:
-  replicas: 4
+  replicas: 2
   selector:
     matchLabels:
       app: notification
@@ -20,7 +20,7 @@ spec:
     spec:
       containers:
         - name: notification
-          image: nasi101/notification:1.0.0
+          image: nasi101/notification
           envFrom:
             - configMapRef:
                 name: notification-configmap
