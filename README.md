@@ -50,7 +50,10 @@ Follow these steps to deploy your microservice application:
    kubectl get all
    ```
 
-6. **Destroying the Infrastructure:** 
+6. **Destroying the Infrastructure** 
+
+
+### Low Level Steps
 
 #### Cluster Creation
 
@@ -169,7 +172,6 @@ Ensure you have created two queues in RabbitMQ named `mp3` and `video`. To creat
   cd notification-service/manifest
   kubectl apply -f .
   ```
-```
 
 ## Application Validation
 
@@ -180,6 +182,8 @@ kubectl get all
 ```
 
 ### Notification Configuration
+
+
 
 For configuring email notifications and two-factor authentication (2FA), follow these steps:
 
