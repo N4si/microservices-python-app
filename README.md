@@ -144,6 +144,33 @@ Ensure you have created two queues in RabbitMQ named `mp3` and `video`. To creat
 
 **NOTE:** Ensure that all the necessary ports are open in the node security group.
 
+##Apply the manifest file for each microservice:
+
+- **Auth Service:**
+  ```
+  cd auth-service/manifest
+  kubectl apply -f .
+  ```
+
+- **Gateway Service:**
+  ```
+  cd gateway-service/manifest
+  kubectl apply -f .
+  ```
+
+- **Converter Service:**
+  ```
+  cd converter-service/manifest
+  kubectl apply -f .
+  ```
+
+- **Notification Service:**
+  ```
+  cd notification-service/manifest
+  kubectl apply -f .
+  ```
+```
+
 ## Application Validation
 
 After deploying the microservices, verify the status of all components by running:
