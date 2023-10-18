@@ -3,7 +3,7 @@ Converting mp4 videos to mp3 in a microservices architecture.
 
 ## Architecture
 
-![Architecture](./Project documentation/ProjectArchitecture.png)
+![Architecture]("./Project documentation/ProjectArchitecture.png")
 
 ## Deploying a Python-based Microservice Application on AWS EKS
 
