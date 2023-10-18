@@ -117,6 +117,27 @@ After deploying the microservices, verify the status of all components by runnin
 kubectl get all
 ```
 
+### Notification Configuration
+
+For configuring email notifications and two-factor authentication (2FA), follow these steps:
+
+1. Go to your Gmail account and click on your profile.
+
+2. Click on "Manage Your Google Account."
+
+3. Navigate to the "Security" tab on the left side panel.
+
+4. Enable "2-Step Verification."
+
+5. Search for the application-specific passwords. You will find it in the settings.
+
+6. Click on "Other" and provide your name.
+
+7. Click on "Generate" and copy the generated password.
+
+8. Paste this generated password in `converter/manifest/secret.yaml` along with your email.
+
+
 Run the application through the following API calls:
 
 # API Definition
@@ -151,4 +172,3 @@ To clean up the infrastructure, follow these steps:
 2. **Delete the EKS Cluster:** Once the nodes are deleted, you can proceed to delete the EKS cluster itself.
 ```
 
-Feel free to copy and paste this Markdown into a file to use it as your complete document.
