@@ -99,15 +99,6 @@ Follow these steps to deploy your microservice application:
 
 Here are some essential Kubernetes commands for managing your deployment:
 
-- **Create a Namespace:**
-  ```
-  kubectl create ns app
-  ```
-
-- **Set Namespace for the Current Context:**
-  ```
-  kubectl config set-context --current --namespace=app
-  ```
 
 ### MongoDB
 
