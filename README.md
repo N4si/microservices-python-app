@@ -60,10 +60,7 @@ Follow these steps to deploy your microservice application:
 1. **Log in to AWS Console:**
    - Access the AWS Management Console with your AWS account credentials.
 
-2. **Open EKS Dashboard:**
-   - Navigate to the Amazon EKS service from the AWS Console dashboard.
-
-3. **Create eksCluster IAM Role**
+2. **Create eksCluster IAM Role**
    - Follow the steps mentioned in [this](https://docs.aws.amazon.com/eks/latest/userguide/service_IAM_role.html) documentation using root user
    - After creating it will look like this:
 
@@ -73,7 +70,7 @@ Follow these steps to deploy your microservice application:
 
    - Please attach `AmazonEKS_CNI_Policy` explicitly if it is not attached by default
 
-4. **Create Node Role - AmazonEKSNodeRole**
+3. **Create Node Role - AmazonEKSNodeRole**
    - Follow the steps mentioned in [this](https://docs.aws.amazon.com/eks/latest/userguide/create-node-role.html#create-worker-node-role) documentation using root user
    - Please note that you do NOT need to configure any VPC CNI policy mentioned after step 5.e under Creating the Amazon EKS node IAM role
    - Simply attach the following policies to your role once you have created `AmazonEKS_CNI_Policy` , `AmazonEBSCSIDriverPolicy` , `AmazonEC2ContainerRegistryReadOnly`
@@ -83,6 +80,9 @@ Follow these steps to deploy your microservice application:
 <p align="center">
   <img src="./Project documentation/node_iam.png" width="600" title="Node_IAM" alt="Node_IAM">
   </p>
+
+4. **Open EKS Dashboard:**
+   - Navigate to the Amazon EKS service from the AWS Console dashboard.
 
 5. **Create EKS Cluster:**
    - Click "Create cluster."
