@@ -68,7 +68,7 @@ Follow these steps to deploy your microservice application:
    - After creating it will look like this:
 
    <p align="center">
-  <img src="./Project documentation/ekscluster_role.png" width="600" title="Architecture" alt="Architecture">
+  <img src="./Project documentation/ekscluster_role.png" width="600" title="ekscluster_role" alt="ekscluster_role">
   </p>
 
    - Please attach `AmazonEKS_CNI_Policy` explicitly if it is not attached by default
