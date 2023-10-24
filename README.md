@@ -157,7 +157,11 @@ Set the database username and password in `values.yaml`. Install PostgreSQL from
 cd ..
 cd Postgres
 helm install postgres .
-Get-Content '.\init.sql' | psql 'postgres://<username>:<pwd>@<nodeip>:30003/authdb'
+```
+
+Connect to the Postgres database and copy all the queries from the "init.sql" file.
+```
+psql 'postgres://<username>:<pwd>@<nodeip>:30003/authdb'
 ```
 
 ### RabbitMQ
