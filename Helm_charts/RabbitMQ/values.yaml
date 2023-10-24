@@ -4,4 +4,4 @@ service:
 
 ingress:
   class: addon-http-application-routing
-  host: rabbit-mq.gr7.us-east-1.eks.amazonaws.com
+  host: rabbit-mq.gr7.us-east-1.eks.amazonaws.com 
