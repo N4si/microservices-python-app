@@ -236,6 +236,16 @@ Run the application through the following API calls:
 
 # API Definition
 
+- **Signup Endpoint**
+  ```http request
+  POST http://nodeIP:30002/signup
+  ```
+
+  ```console
+  curl --location --request POST 'nodeIP:30002/signup' --form 'username="test"' --form 'password="data"'
+  ``` 
+  Expected output: User Created successfully
+
 - **Login Endpoint**
   ```http request
   POST http://nodeIP:30002/login

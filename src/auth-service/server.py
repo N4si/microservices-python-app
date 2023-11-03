@@ -12,7 +12,22 @@ def get_db_connection():
                             port=5432)
     return conn
 
-
+@server.route('/signup', methods=['POST'])
+def signup():
+    # auth_table_name = os.getenv('AUTH_TABLE')
+    auth_table_name = 'auth_user'
+    if not request.form['username'] or not request.form['password']:
+        return 'Please enter valid username and password', 401, {'WWW-Authenticate': 'Basic realm="Login required!"'}
+    
+    conn = get_db_connection()
+    cur = conn.cursor()
+    query = f"INSERT INTO {auth_table_name} (email, password) VALUES ('{request.form['username']}', '{request.form['password']}');"
+    res = cur.execute(query)
+    conn.commit()
+    
+    if res is None:
+        return 'User created successfully'
+        
 @server.route('/login', methods=['POST'])
 def login():
     auth_table_name = os.getenv('AUTH_TABLE')
