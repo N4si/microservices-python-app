@@ -236,7 +236,7 @@ Run the application through the following API calls:
 
 # API Definition
 
-- **Login Endpoint**
+- **Signup Endpoint**
   ```http request
   POST http://nodeIP:30002/signup
   ```
