@@ -23,10 +23,11 @@ def login():
     conn = get_db_connection()
     cur = conn.cursor()
     query = f"SELECT email, password FROM {auth_table_name} WHERE email = %s"
-    res = cur.execute(query, (auth.username,))
     
-    if res is None:
-        user_row = cur.fetchone()
+    cur.execute(query, (auth.username,))
+    user_row = cur.fetchone()
+
+    if user_row is not None:
         email = user_row[0]
         password = user_row[1]
 
