@@ -1,0 +1,280 @@
+MongoDB version miss match happned 
+1 first deleted the helm chart
+2 deleted the pv and pvc
+3 still data is present in the one of the kubernetes node connect that ec2 filesystem and deleted that data from ( hostPath: path: "/mnt/data" )
+4  updated the version in git
+5 git pull in ec2 worker node
+6 helm chart created
+
+1️⃣ MongoDB version mismatch occurred after upgrading image from mongo:4.0.8 to mongo:6.0/7.0.
+
+2️⃣ Pod entered CrashLoopBackOff due to incompatible WiredTiger storage files.
+
+3️⃣ Error observed: “This version of MongoDB is too recent to start up on the existing data files.”
+
+4️⃣ Root cause identified as old MongoDB 4.0 data present in hostPath /mnt/data.
+
+5️⃣ Deleted existing Helm release using helm uninstall mongodb.
+
+6️⃣ Deleted PersistentVolumeClaim using kubectl delete pvc mongodb-pvc.
+
+7️⃣ Deleted PersistentVolume using kubectl delete pv mongodb-pv.
+
+8️⃣ Connected to Kubernetes worker node EC2 instance.
+
+9️⃣ Verified old data files present inside /mnt/data.
+
+🔟 Manually removed old storage files using sudo rm -rf /mnt/data/*.
+
+1️⃣1️⃣ Updated MongoDB image version in Git repository from mongo:4.0.8 to mongo:6.0.
+
+1️⃣2️⃣ Pulled latest changes on EC2 using git pull origin main.
+
+1️⃣3️⃣ Reinstalled Helm chart using helm install mongodb ..
+
+1️⃣4️⃣ Verified correct image using kubectl describe pod mongodb-0 | grep Image.
+
+1️⃣5️⃣ Confirmed pod status changed to 1/1 Running.
+
+1️⃣6️⃣ Successfully resolved MongoDB storage engine compatibility issue.
+
+=========================================================================================================================================================================
+
+Perfect 👌 I’ll now give you a professional troubleshooting-focused document with deep technical explanation included.
+
+You can submit this as:
+
+Project documentation
+
+DevOps case study
+
+Interview explanation material
+
+Production troubleshooting report
+
+📄 MongoDB Helm Deployment – Detailed Troubleshooting Report
+1️⃣ Environment Overview
+Infrastructure
+
+AWS EC2
+
+Kubernetes Cluster
+
+Worker Nodes
+
+Custom Helm Chart
+
+StatefulSet for MongoDB
+
+NodePort Service
+
+Manual PersistentVolume (hostPath)
+
+Initial MongoDB Version
+mongo:4.0.8
+2️⃣ Issue 1 – Mongosh Compatibility Error
+❌ Error Observed
+MongoServerSelectionError:
+Server reports maximum wire version 7,
+but Node.js Driver requires at least 8 (MongoDB 4.2)
+🔍 Technical Analysis
+
+Wire version mapping:
+
+Wire Version	MongoDB Version
+7	MongoDB 4.0
+8	MongoDB 4.2
+
+Modern mongosh requires MongoDB ≥ 4.2.
+
+Server was running MongoDB 4.0.8.
+
+🛠 Troubleshooting Steps
+
+Checked MongoDB version:
+
+kubectl exec -it mongodb-0 -- mongod --version
+
+Confirmed v4.0.8
+
+Identified version mismatch
+
+✅ Resolution
+
+Upgraded image to:
+
+mongo:6.0
+3️⃣ Issue 2 – CrashLoopBackOff After Upgrade
+❌ Error Observed
+This version of MongoDB is too recent to start up on the existing data files.
+🔍 Technical Root Cause
+
+MongoDB storage engine = WiredTiger.
+
+Data files created by MongoDB 4.0 existed inside:
+
+/mnt/data
+
+Deployment used:
+
+hostPath:
+  path: "/mnt/data"
+
+When upgrading to MongoDB 6/7:
+
+New server tried reading old storage format
+
+Storage engine incompatibility
+
+Pod crashed
+
+4️⃣ Issue 3 – WiredTiger Version Conflict
+❌ Error Observed
+unsupported WiredTiger file version:
+this build only supports versions up to 3,
+and the file is version 5
+🔍 What Happened
+
+Opposite version conflict occurred:
+
+MongoDB 7 data files existed
+
+Deployment reverted back to mongo:4.0.8
+
+Older server cannot read newer storage files
+
+Result:
+
+Fatal Assertion 28595
+CrashLoopBackOff
+5️⃣ Deep Storage Troubleshooting
+Step 1 – Verify Image Version
+kubectl describe pod mongodb-0 | grep Image
+
+Confirmed incorrect image version.
+
+Step 2 – Check PV & PVC
+kubectl get pvc
+kubectl get pv
+
+Confirmed PV was using hostPath.
+
+Step 3 – Identify Physical Storage Location
+
+PV YAML:
+
+hostPath:
+  path: "/mnt/data"
+
+SSH into worker node:
+
+sudo ls /mnt/data
+
+Found old WiredTiger files:
+
+WiredTiger
+collection-*.wt
+journal/
+mongod.lock
+Important Learning
+
+Deleting PVC does NOT delete hostPath data.
+
+Because:
+
+persistentVolumeReclaimPolicy: Retain
+
+hostPath stores data directly on node disk.
+
+6️⃣ Final Resolution Steps
+Step 1 – Remove Helm Release
+helm uninstall mongodb
+Step 2 – Delete PV & PVC
+kubectl delete pvc mongodb-pvc
+kubectl delete pv mongodb-pv
+Step 3 – Manually Clean Disk
+
+On worker node:
+
+sudo rm -rf /mnt/data/*
+Step 4 – Correct Image Version
+
+Updated StatefulSet:
+
+image: mongo:6.0
+Step 5 – Fresh Install
+helm install mongodb .
+Step 6 – Verification
+kubectl get pods
+kubectl exec -it mongodb-0 -- mongod --version
+
+Pod successfully moved to:
+
+1/1 Running
+7️⃣ Git Branch Tracking Issue
+❌ Problem
+There is no tracking information for the current branch.
+🔍 Root Cause
+
+Local branch not tracking origin/main.
+
+✅ Fix
+git pull origin main
+
+OR
+
+git branch --set-upstream-to=origin/main master
+8️⃣ Root Cause Summary
+Issue	Root Cause
+Mongosh connection error	Old MongoDB 4.0
+CrashLoopBackOff	Storage engine mismatch
+WiredTiger version error	Mixed data + image versions
+PVC deletion ineffective	hostPath retains disk data
+Git pull not updating	Branch tracking not set
+9️⃣ DevOps Best Practices Learned
+✅ Do NOT use hostPath in production (EKS)
+
+Use:
+
+EBS via StorageClass
+
+Dynamic provisioning
+
+✅ Always upgrade MongoDB step-by-step:
+4.0 → 4.2 → 4.4 → 5.0 → 6.0
+✅ Avoid hardcoding image in templates
+
+Use Helm values:
+
+values.yaml:
+
+image:
+  repository: mongo
+  tag: "6.0"
+
+template:
+
+image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+✅ Always verify image after deployment
+kubectl describe pod | grep Image
+🔟 Final Stable Architecture
+
+MongoDB 6.0
+
+StatefulSet
+
+Clean hostPath
+
+NodePort
+
+Helm-managed deployment
+
+Proper Git tracking
+
+🎯 Final Outcome
+
+✔ Version mismatch resolved
+✔ Storage conflict resolved
+✔ CrashLoopBackOff eliminated
+✔ Helm deployment stable
+✔ Git workflow corrected
