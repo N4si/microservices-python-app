@@ -1,0 +1,67 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: vidcast-alerts
+  namespace: monitoring
+  labels:
+    release: monitoring
+spec:
+  groups:
+    - name: vidcast.pods
+      interval: 1m
+      rules:
+        - alert: PodCrashLoopBackOff
+          expr: |
+            rate(kube_pod_container_status_restarts_total{namespace="default"}[10m]) * 60 > 0.5
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Pod {{ $labels.pod }} is crash-looping"
+            description: "Pod {{ $labels.pod }} in namespace {{ $labels.namespace }} has restarted more than 3 times in 10 minutes. Investigate with: kubectl logs {{ $labels.pod }} --previous"
+
+    - name: vidcast.resources
+      interval: 1m
+      rules:
+        - alert: HighNodeMemoryUsage
+          expr: |
+            100 * (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) > 85
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Node memory usage above 85%"
+            description: "Node memory is {{ $value | humanize }}% used. Risk of OOMKill for converter pods. Consider scaling down or upgrading the node."
+
+        - alert: HighNodeCPUUsage
+          expr: |
+            100 - (avg(rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 85
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Node CPU usage above 85%"
+            description: "Node CPU is {{ $value | humanize }}% used. Converter replicas may be saturating the node."
+
+    - name: vidcast.queues
+      interval: 1m
+      rules:
+        - alert: RabbitMQQueueBacklog
+          expr: |
+            rabbitmq_queue_messages{queue="video"} > 10
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Video queue backlog: {{ $value }} messages"
+            description: "More than 10 videos are waiting for conversion. Converter workers may be overwhelmed or crashed."
+
+        - alert: RabbitMQUnavailable
+          expr: |
+            up{job="rabbitmq"} == 0
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "RabbitMQ is unreachable"
+            description: "RabbitMQ has been down for 2 minutes. The entire upload/convert pipeline is blocked. Check: kubectl describe pod rabbitmq-0"

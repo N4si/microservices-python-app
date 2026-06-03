@@ -16,7 +16,11 @@ spec:
     spec:
       containers:
       - name: mongodb        
-        image: mongo:4.0.8
+        # mongo:4.2 (wire v8) is the minimum the services' pinned PyMongo
+        # supports after the CVE dependency bump (commit 5c224a3). mongo:4.0.8
+        # (wire v7) was rejected at runtime with PyMongo error
+        # "requires at least 8 (MongoDB 4.2)", breaking gateway/converter.
+        image: mongo:4.2
         env:
           - name: MONGO_INITDB_ROOT_USERNAME_FILE
             value: /etc/k8-test/admin/MONGO_ROOT_USERNAME

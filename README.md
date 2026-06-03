@@ -1,274 +1,251 @@
-# Devops Project: video-converter
-Converting mp4 videos to mp3 in a microservices architecture.
+# VidCast — Video-to-Audio Microservices Platform
+
+**Turn video recordings into podcast-ready audio.**
+
+VidCast is a production-grade Python microservices platform running on AWS EKS. Upload an MP4, and the platform converts it to MP3 asynchronously — then emails you a download link. Built to demonstrate event-driven architecture, container security, CI/CD automation, and infrastructure as code.
+
+---
+
+## What's Inside
+
+| Component | Technology | What it does |
+|-----------|-----------|--------------|
+| Frontend | React 18 + nginx | Web interface — login, upload, download, monitoring dashboard |
+| Gateway API | Flask + GridFS + Pika | Entry point — handles uploads, downloads, JWT validation |
+| Auth Service | Flask + PyJWT + psycopg2 | Issues and validates JWT tokens against PostgreSQL |
+| Converter | Pika + MoviePy + ffmpeg | 4 worker pods consuming RabbitMQ, converting MP4 → MP3 |
+| Notification | Pika + smtplib | 2 worker pods sending email with download link |
+| MongoDB | mongo:4.0.8 StatefulSet | Stores video and MP3 files via GridFS |
+| PostgreSQL | postgres Deployment | User credentials for auth |
+| RabbitMQ | rabbitmq:3-management | Message broker — video queue and mp3 queue |
 
 ## Architecture
 
-<p align="center">
-  <img src="./Project documentation/ProjectArchitecture.png" width="600" title="Architecture" alt="Architecture">
-  </p>
+```
+Browser
+  │
+  ▼
+Frontend (React, NodePort :30006)
+  │
+  ▼
+Gateway (Flask :8080, NodePort :30002)
+  ├── /login ──► Auth Service (:5000) ──► PostgreSQL (:5432)
+  ├── /upload ──► MongoDB GridFS ──► RabbitMQ "video" queue
+  └── /download ◄── MongoDB GridFS
+                          │
+               RabbitMQ "video" queue
+                          │
+                    Converter ×4 (ffmpeg)
+                    ├── fetch video from MongoDB
+                    ├── convert to MP3
+                    ├── store MP3 in MongoDB
+                    └── publish to RabbitMQ "mp3" queue
+                               │
+                    Notification ×2 (smtplib)
+                    └── email file ID to user
+```
 
-## Deploying a Python-based Microservice Application on AWS EKS
+---
 
-### Introduction
+## Infrastructure
 
-This document provides a step-by-step guide for deploying a Python-based microservice application on AWS Elastic Kubernetes Service (EKS). The application comprises four major microservices: `auth-server`, `converter-module`, `database-server` (PostgreSQL and MongoDB), and `notification-server`.
+- **Platform:** AWS EKS eu-west-2 (London)
+- **Node type:** m7i-flex.large — 2 vCPU / 8 GB RAM
+- **IaC:** Terraform modules for VPC, IAM, EKS, security groups
+- **Helm charts:** MongoDB, PostgreSQL, RabbitMQ
+- **CI/CD:** GitHub Actions (lint → Trivy scan → build → push → EKS deploy)
+- **Staging:** Docker Swarm on EC2 t2.micro (97% cheaper than a second EKS cluster)
+- **Monitoring:** kube-prometheus-stack — Grafana :30007, Alertmanager :30008
+
+---
+
+## Quick Start — Deploy to AWS
 
 ### Prerequisites
 
-Before you begin, ensure that the following prerequisites are met:
-
-1. **Create an AWS Account:** If you do not have an AWS account, create one by following the steps [here](https://docs.aws.amazon.com/streams/latest/dev/setting-up.html).
-
-2. **Install Helm:** Helm is a Kubernetes package manager. Install Helm by following the instructions provided [here](https://helm.sh/docs/intro/install/).
-
-3. **Python:** Ensure that Python is installed on your system. You can download it from the [official Python website](https://www.python.org/downloads/).
-
-4. **AWS CLI:** Install the AWS Command Line Interface (CLI) following the official [installation guide](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html).
-
-5. **Install kubectl:** Install the latest stable version of `kubectl` on your system. You can find installation instructions [here](https://kubernetes.io/docs/tasks/tools/).
-
-6. **Databases:** Set up PostgreSQL and MongoDB for your application.
-
-### High Level Flow of Application Deployment
-
-Follow these steps to deploy your microservice application:
-
-1. **MongoDB and PostgreSQL Setup:** Create databases and enable automatic connections to them.
-
-2. **RabbitMQ Deployment:** Deploy RabbitMQ for message queuing, which is required for the `converter-module`.
-
-3. **Create Queues in RabbitMQ:** Before deploying the `converter-module`, create two queues in RabbitMQ: `mp3` and `video`.
-
-4. **Deploy Microservices:**
-   - **auth-server:** Navigate to the `auth-server` manifest folder and apply the configuration.
-   - **gateway-server:** Deploy the `gateway-server`.
-   - **converter-module:** Deploy the `converter-module`. Make sure to provide your email and password in `converter/manifest/secret.yaml`.
-   - **notification-server:** Configure email for notifications and two-factor authentication (2FA).
-
-5. **Application Validation:** Verify the status of all components by running:
-   ```bash
-   kubectl get all
-   ```
-
-6. **Destroying the Infrastructure** 
-
-
-### Low Level Steps
-
-#### Cluster Creation
-
-1. **Log in to AWS Console:**
-   - Access the AWS Management Console with your AWS account credentials.
-
-2. **Create eksCluster IAM Role**
-   - Follow the steps mentioned in [this](https://docs.aws.amazon.com/eks/latest/userguide/service_IAM_role.html) documentation using root user
-   - After creating it will look like this:
-
-   <p align="center">
-  <img src="./Project documentation/ekscluster_role.png" width="600" title="ekscluster_role" alt="ekscluster_role">
-  </p>
-
-   - Please attach `AmazonEKS_CNI_Policy` explicitly if it is not attached by default
-
-3. **Create Node Role - AmazonEKSNodeRole**
-   - Follow the steps mentioned in [this](https://docs.aws.amazon.com/eks/latest/userguide/create-node-role.html#create-worker-node-role) documentation using root user
-   - Please note that you do NOT need to configure any VPC CNI policy mentioned after step 5.e under Creating the Amazon EKS node IAM role
-   - Simply attach the following policies to your role once you have created `AmazonEKS_CNI_Policy` , `AmazonEBSCSIDriverPolicy` , `AmazonEC2ContainerRegistryReadOnly`
-     incase it is not attached by default
-   - Your AmazonEKSNodeRole will look like this: 
-
-<p align="center">
-  <img src="./Project documentation/node_iam.png" width="600" title="Node_IAM" alt="Node_IAM">
-  </p>
-
-4. **Open EKS Dashboard:**
-   - Navigate to the Amazon EKS service from the AWS Console dashboard.
-
-5. **Create EKS Cluster:**
-   - Click "Create cluster."
-   - Choose a name for your cluster.
-   - Configure networking settings (VPC, subnets).
-   - Choose the `eksCluster` IAM role that was created above
-   - Review and create the cluster.
-
-6. **Cluster Creation:**
-   - Wait for the cluster to provision, which may take several minutes.
-
-7. **Cluster Ready:**
-   - Once the cluster status shows as "Active," you can now create node groups.
-
-#### Node Group Creation
-
-1. In the "Compute" section, click on "Add node group."
-
-2. Choose the AMI (default), instance type (e.g., t3.medium), and the number of nodes (attach a screenshot here).
-
-3. Click "Create node group."
-
-#### Adding inbound rules in Security Group of Nodes
-
-**NOTE:** Ensure that all the necessary ports are open in the node security group.
-
-<p align="center">
-  <img src="./Project documentation/inbound_rules_sg.png" width="600" title="Inbound_rules_sg" alt="Inbound_rules_sg">
-  </p>
-
-#### Enable EBS CSI Addon
-1. enable addon `ebs csi` this is for enabling pvcs once cluster is created
-
-<p align="center">
-  <img src="./Project documentation/ebs_addon.png" width="600" title="ebs_addon" alt="ebs_addon">
-  </p>
-
-#### Deploying your application on EKS Cluster
-
-1. Clone the code from this repository.
-
-2. Set the cluster context:
-   ```
-   aws eks update-kubeconfig --name <cluster_name> --region <aws_region>
-   ```
-
-### Commands
-
-Here are some essential Kubernetes commands for managing your deployment:
-
-
-### MongoDB
-
-To install MongoDB, set the database username and password in `values.yaml`, then navigate to the MongoDB Helm chart folder and run:
-
-```
-cd Helm_charts/MongoDB
-helm install mongo .
+```bash
+# Tools required
+aws --version       # AWS CLI v2
+kubectl version     # kubectl 1.31+
+helm version        # Helm 3.x
+terraform version   # Terraform 1.5+
 ```
 
-Connect to the MongoDB instance using:
+### 1 — Provision infrastructure with Terraform
 
-```
-mongosh mongodb://<username>:<pwd>@<nodeip>:30005/mp3s?authSource=admin
-```
+```bash
+cd terraform/environments/dev
 
-### PostgreSQL
+# Copy and fill in your values
+cp terraform.tfvars.example terraform.tfvars
+# Edit terraform.tfvars with your state bucket name etc.
 
-Set the database username and password in `values.yaml`. Install PostgreSQL from the PostgreSQL Helm chart folder and initialize it with the queries in `init.sql`. For PowerShell users:
+terraform init \
+  -backend-config="bucket=YOUR_STATE_BUCKET" \
+  -backend-config="key=vidcast/dev/terraform.tfstate" \
+  -backend-config="region=eu-west-2" \
+  -backend-config="dynamodb_table=vidcast-terraform-locks"
 
-```
-cd ..
-cd Postgres
-helm install postgres .
-```
-
-Connect to the Postgres database and copy all the queries from the "init.sql" file.
-```
-psql 'postgres://<username>:<pwd>@<nodeip>:30003/authdb'
+terraform plan
+terraform apply
 ```
 
-### RabbitMQ
+> **Note:** Never use T-type instances on this account. The Terraform EKS module includes a validation block that rejects them. Use `m7i-flex.large` or any M/C/R-series type.
 
-Deploy RabbitMQ by running:
+### 2 — Deploy infrastructure services
 
-```
-helm install rabbitmq .
-```
+```bash
+# Connect kubectl to the new cluster
+aws eks update-kubeconfig --name vidcast-cluster --region eu-west-2
 
-Ensure you have created two queues in RabbitMQ named `mp3` and `video`. To create queues, visit `<nodeIp>:30004>` and use default username `guest` and password `guest`
-
-**NOTE:** Ensure that all the necessary ports are open in the node security group.
-
-### Apply the manifest file for each microservice:
-
-- **Auth Service:**
-  ```
-  cd auth-service/manifest
-  kubectl apply -f .
-  ```
-
-- **Gateway Service:**
-  ```
-  cd gateway-service/manifest
-  kubectl apply -f .
-  ```
-
-- **Converter Service:**
-  ```
-  cd converter-service/manifest
-  kubectl apply -f .
-  ```
-
-- **Notification Service:**
-  ```
-  cd notification-service/manifest
-  kubectl apply -f .
-  ```
-
-### Application Validation
-
-After deploying the microservices, verify the status of all components by running:
-
-```
-kubectl get all
+# Deploy MongoDB, PostgreSQL, RabbitMQ
+cd Helm_charts/MongoDB && helm install mongodb . && cd ../..
+kubectl wait --for=condition=ready pod/mongodb-0 --timeout=120s
+cd Helm_charts/Postgres && helm install postgres . && cd ../..
+cd Helm_charts/RabbitMQ && helm install rabbitmq . && cd ../..
 ```
 
-### Notification Configuration
+### 3 — Initialise PostgreSQL
 
+```bash
+NODE_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="ExternalIP")].address}')
+PGPASSWORD=YOUR_POSTGRES_PASSWORD psql -h $NODE_IP -p 30003 \
+  -U YOUR_POSTGRES_USERNAME -d authdb -f Helm_charts/Postgres/init.sql
+```
 
+### 4 — Create RabbitMQ queues
 
-For configuring email notifications and two-factor authentication (2FA), follow these steps:
+```bash
+curl -u guest:guest -X PUT http://$NODE_IP:30004/api/queues/%2F/video \
+  -H "Content-Type: application/json" -d '{"durable":true}'
+curl -u guest:guest -X PUT http://$NODE_IP:30004/api/queues/%2F/mp3 \
+  -H "Content-Type: application/json" -d '{"durable":true}'
+```
 
-1. Go to your Gmail account and click on your profile.
+### 5 — Deploy microservices
 
-2. Click on "Manage Your Google Account."
+```bash
+kubectl apply -f src/auth-service/manifest/
+kubectl apply -f src/gateway-service/manifest/
+kubectl apply -f src/converter-service/manifest/
+kubectl apply -f src/notification-service/manifest/
+kubectl apply -f src/frontend/manifest/
+kubectl get pods  # all should reach Running
+```
 
-3. Navigate to the "Security" tab on the left side panel.
+### 6 — Test end-to-end
 
-4. Enable "2-Step Verification."
+```bash
+# Login
+TOKEN=$(curl -s -X POST http://$NODE_IP:30002/login -u "EMAIL:PASSWORD")
 
-5. Search for the application-specific passwords. You will find it in the settings.
+# Upload
+curl -X POST http://$NODE_IP:30002/upload \
+  -F "file=@assets/video.mp4" -H "Authorization: Bearer $TOKEN"
 
-6. Click on "Other" and provide your name.
+# Download (use file_id from notification email)
+curl -X GET "http://$NODE_IP:30002/download?fid=FILE_ID" \
+  -H "Authorization: Bearer $TOKEN" -o output.mp3
+```
 
-7. Click on "Generate" and copy the generated password.
+---
 
-8. Paste this generated password in `notification-service/manifest/secret.yaml` along with your email.
+## CI/CD Pipeline
 
-Run the application through the following API calls:
+Push to `main` triggers the pipeline automatically:
 
-# API Definition
+```
+push to main
+  └── GitHub Actions ci.yml
+        ├── ruff lint (Python)
+        ├── Docker build × 4 services (matrix)
+        ├── Trivy scan (CRITICAL + HIGH — fails build if found)
+        └── Push to Docker Hub (tagged with short git SHA)
+              └── GitHub Actions cd.yml
+                    ├── aws eks update-kubeconfig
+                    └── kubectl set image × 4 deployments
+```
 
-- **Login Endpoint**
-  ```http request
-  POST http://nodeIP:30002/login
-  ```
+Jenkins pipeline (`Jenkinsfile`) mirrors the same stages for enterprise environments, adding a Docker Swarm staging deploy and a manual approval gate before production.
 
-  ```console
-  curl -X POST http://nodeIP:30002/login -u <email>:<password>
-  ``` 
-  Expected output: success!
+See `GITHUB_SECRETS_REQUIRED.md` for the secrets to configure.
 
-- **Upload Endpoint**
-  ```http request
-  POST http://nodeIP:30002/upload
-  ```
+---
 
-  ```console
-   curl -X POST -F 'file=@./video.mp4' -H 'Authorization: Bearer <JWT Token>' http://nodeIP:30002/upload
-  ``` 
-  
-  Check if you received the ID on your email.
+## Monitoring
 
-- **Download Endpoint**
-  ```http request
-  GET http://nodeIP:30002/download?fid=<Generated file identifier>
-  ```
-  ```console
-   curl --output video.mp3 -X GET -H 'Authorization: Bearer <JWT Token>' "http://nodeIP:30002/download?fid=<Generated fid>"
-  ``` 
+```bash
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm repo update
+helm install monitoring prometheus-community/kube-prometheus-stack \
+  -f monitoring/values.yaml -n monitoring --create-namespace
 
-## Destroying the Infrastructure
+kubectl apply -f monitoring/alerts/vidcast-alerts.yaml
+```
 
-To clean up the infrastructure, follow these steps:
+| Dashboard | URL | Credentials |
+|-----------|-----|-------------|
+| Grafana — VidCast Operations | `http://NODE_IP:30007` | admin / vidcast-demo |
+| Alertmanager | `http://NODE_IP:30008` | — |
 
-1. **Delete the Node Group:** Delete the node group associated with your EKS cluster.
+---
 
-2. **Delete the EKS Cluster:** Once the nodes are deleted, you can proceed to delete the EKS cluster itself.
+## Security
+
+- All pods run as non-root (uid 1000), read-only root filesystem, capabilities dropped
+- Resource limits on every container — converters can't starve gateway/auth
+- HTTP health probes on auth + gateway; exec probes on converter + notification
+- Secrets gitignored — never committed
+- Images scanned with Trivy before push; tagged with git SHA (no `:latest` in production)
+
+---
+
+## Teardown
+
+```bash
+# Microservices
+kubectl delete -f src/auth-service/manifest/
+kubectl delete -f src/gateway-service/manifest/
+kubectl delete -f src/converter-service/manifest/
+kubectl delete -f src/notification-service/manifest/
+kubectl delete -f src/frontend/manifest/
+
+# Helm
+helm uninstall mongodb postgres rabbitmq
+helm uninstall monitoring -n monitoring
+
+# Infrastructure
+cd terraform/environments/dev
+terraform destroy
+```
+
+---
+
+## Bugs Fixed
+
+| # | Severity | Issue | Fix |
+|---|----------|-------|-----|
+| 1 | High | `unauth_count.inc()` NameError in gateway service crashes pod on any 401 response | Removed 2 stale Prometheus stub lines |
+| 2 | High | JWT secret was `"sarcasm"` (base64) — trivially guessable | Replaced with 34-char random string |
+
+---
+
+## Repository Structure
+
+```
+├── .github/workflows/    # CI (lint+scan+build+push) and CD (EKS deploy)
+├── Helm_charts/          # MongoDB, PostgreSQL, RabbitMQ Helm charts
+├── Jenkinsfile           # Enterprise CI/CD pipeline with Swarm staging
+├── docker-compose.swarm.yml  # Docker Swarm staging environment
+├── monitoring/           # kube-prometheus-stack values, dashboard, alerts
+├── src/
+│   ├── auth-service/
+│   ├── converter-service/
+│   ├── frontend/         # React web app + nginx + Kubernetes manifests
+│   ├── gateway-service/
+│   └── notification-service/
+└── terraform/
+    ├── environments/dev/ # Root module (main, variables, outputs, backend)
+    └── modules/          # vpc, iam, eks, security-groups
+```
+This is an edit to trigger CI, which builds the Docker images

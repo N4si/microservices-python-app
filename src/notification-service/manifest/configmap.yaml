@@ -4,4 +4,6 @@ metadata:
   name: notification-configmap
 data:
   MP3_QUEUE: "mp3"
-  VIDEO_QUEUE: "video"
+  # VIDEO_QUEUE removed: the notification consumer only reads MP3_QUEUE
+  # (consumer.py consumes os.environ.get("MP3_QUEUE")). The video queue is
+  # consumed exclusively by the converter service, so this value was never read.
