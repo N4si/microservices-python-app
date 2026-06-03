@@ -1,0 +1,139 @@
+{
+  "title": "VidCast Operations",
+  "uid": "vidcast-ops",
+  "tags": ["vidcast"],
+  "timezone": "browser",
+  "refresh": "30s",
+  "schemaVersion": 36,
+  "panels": [
+    {
+      "id": 1,
+      "title": "Pod Status — All Services",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 12, "x": 0, "y": 0},
+      "targets": [
+        {
+          "expr": "sum by (pod) (kube_pod_status_phase{namespace='default', phase='Running'})",
+          "legendFormat": "{{pod}}"
+        }
+      ],
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "reduceOptions": {"calcs": ["last"]}
+      }
+    },
+    {
+      "id": 2,
+      "title": "Pod Restarts (last 1h)",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 12, "x": 12, "y": 0},
+      "targets": [
+        {
+          "expr": "sum by (pod) (increase(kube_pod_container_status_restarts_total{namespace='default'}[1h]))",
+          "legendFormat": "{{pod}}"
+        }
+      ],
+      "options": {
+        "colorMode": "background",
+        "thresholds": {
+          "steps": [
+            {"color": "green", "value": 0},
+            {"color": "yellow", "value": 1},
+            {"color": "red", "value": 3}
+          ]
+        }
+      }
+    },
+    {
+      "id": 3,
+      "title": "Node CPU Usage %",
+      "type": "gauge",
+      "gridPos": {"h": 6, "w": 8, "x": 0, "y": 4},
+      "targets": [
+        {
+          "expr": "100 - (avg(rate(node_cpu_seconds_total{mode='idle'}[5m])) * 100)",
+          "legendFormat": "CPU %"
+        }
+      ],
+      "options": {
+        "reduceOptions": {"calcs": ["lastNotNull"]},
+        "thresholds": {
+          "steps": [
+            {"color": "green", "value": 0},
+            {"color": "yellow", "value": 70},
+            {"color": "red", "value": 85}
+          ]
+        }
+      }
+    },
+    {
+      "id": 4,
+      "title": "Node Memory Usage %",
+      "type": "gauge",
+      "gridPos": {"h": 6, "w": 8, "x": 8, "y": 4},
+      "targets": [
+        {
+          "expr": "100 * (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes))",
+          "legendFormat": "Memory %"
+        }
+      ],
+      "options": {
+        "reduceOptions": {"calcs": ["lastNotNull"]},
+        "thresholds": {
+          "steps": [
+            {"color": "green", "value": 0},
+            {"color": "yellow", "value": 70},
+            {"color": "red", "value": 85}
+          ]
+        }
+      }
+    },
+    {
+      "id": 5,
+      "title": "RabbitMQ Queue Depth",
+      "type": "timeseries",
+      "gridPos": {"h": 6, "w": 8, "x": 16, "y": 4},
+      "description": "Messages waiting in video and mp3 queues. Rising video queue = converter backlog.",
+      "targets": [
+        {
+          "expr": "rabbitmq_queue_messages{queue='video'}",
+          "legendFormat": "video queue"
+        },
+        {
+          "expr": "rabbitmq_queue_messages{queue='mp3'}",
+          "legendFormat": "mp3 queue"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "CPU Usage per Pod",
+      "type": "timeseries",
+      "gridPos": {"h": 6, "w": 12, "x": 0, "y": 10},
+      "targets": [
+        {
+          "expr": "sum by (pod) (rate(container_cpu_usage_seconds_total{namespace='default', pod!=''}[5m]))",
+          "legendFormat": "{{pod}}"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Memory Usage per Pod",
+      "type": "timeseries",
+      "gridPos": {"h": 6, "w": 12, "x": 12, "y": 10},
+      "targets": [
+        {
+          "expr": "sum by (pod) (container_memory_working_set_bytes{namespace='default', pod!=''})",
+          "legendFormat": "{{pod}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes"
+        }
+      }
+    }
+  ]
+}

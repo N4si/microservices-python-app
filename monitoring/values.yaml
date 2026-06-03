@@ -1,0 +1,69 @@
+# kube-prometheus-stack Helm values for VidCast
+# Install: helm install monitoring prometheus-community/kube-prometheus-stack \
+#            -f monitoring/values.yaml -n monitoring --create-namespace
+
+grafana:
+  adminPassword: vidcast-demo
+  service:
+    type: NodePort
+    nodePort: 30007
+  persistence:
+    enabled: true
+    size: 2Gi
+  sidecar:
+    dashboards:
+      enabled: true
+      searchNamespace: monitoring
+  grafana.ini:
+    server:
+      root_url: "%(protocol)s://%(domain)s:30007"
+
+alertmanager:
+  service:
+    type: NodePort
+    nodePort: 30008
+  alertmanagerSpec:
+    storage:
+      volumeClaimTemplate:
+        spec:
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 2Gi
+
+prometheus:
+  prometheusSpec:
+    retention: 7d
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 10Gi
+    # EKS manages etcd, scheduler, controller-manager — disable scraping
+    kubeEtcd:
+      enabled: false
+    kubeScheduler:
+      enabled: false
+    kubeControllerManager:
+      enabled: false
+    additionalScrapeConfigs:
+      - job_name: 'vidcast-gateway'
+        static_configs:
+          - targets: ['gateway:8080']
+        metrics_path: /metrics
+
+# Disable components EKS manages internally
+kubeEtcd:
+  enabled: false
+kubeScheduler:
+  enabled: false
+kubeControllerManager:
+  enabled: false
+
+# Keep these enabled — node exporter and kube-state-metrics provide pod/node metrics
+nodeExporter:
+  enabled: true
+kubeStateMetrics:
+  enabled: true

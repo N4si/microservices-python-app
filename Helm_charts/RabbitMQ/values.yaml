@@ -1,3 +1,7 @@
 service:
   name: rabbitmq
   port: 15672
+
+secret:
+  default_user: rabbituser
+  default_pass: RabbitSecure2024

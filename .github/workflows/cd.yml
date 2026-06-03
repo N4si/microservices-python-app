@@ -1,0 +1,47 @@
+name: VidCast CD — Deploy to EKS
+
+on:
+  workflow_run:
+    workflows: ["VidCast CI — Lint, Scan, Build, Push"]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  id-token: write   # required to request the OIDC token
+  contents: read
+
+jobs:
+  deploy:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Update kubeconfig for EKS
+        run: |
+          aws eks update-kubeconfig \
+            --name ${{ secrets.EKS_CLUSTER_NAME }} \
+            --region ${{ secrets.AWS_REGION }}
+
+      - name: Set short SHA from triggering workflow
+        run: |
+          echo "SHORT_SHA=$(echo ${{ github.event.workflow_run.head_sha }} | cut -c1-7)" >> $GITHUB_ENV
+
+      - name: Deploy services to EKS
+        run: |
+          for svc in auth-service gateway-service converter-service notification-service; do
+            deploy_name="${svc%-service}"
+            kubectl set image deployment/${deploy_name} \
+              ${deploy_name}=${{ secrets.DOCKERHUB_USERNAME }}/${svc}:${{ env.SHORT_SHA }} || true
+            kubectl rollout status deployment/${deploy_name} --timeout=120s || true
+          done
+
+      - name: Verify all pods running
+        run: kubectl get pods -o wide

@@ -1,0 +1,18 @@
+# Keep the build context small and free of anything the image doesn't need.
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+.pytest_cache/
+.git/
+.gitignore
+
+# Kubernetes manifests and secrets must never enter the image build context.
+manifest/
+*secret*.yaml
+
+# Docs / study material
+*_EXPLAINED.md
+README.md
+*.md

@@ -6,6 +6,11 @@ spec:
   accessModes:
     - ReadWriteOnce
   resources:
+    # NOTE: the backing PersistentVolume (templates/pv.yaml) is 10Gi but this
+    # claim only requests 1Gi. The bind still succeeds (a PVC binds to any PV
+    # that is >= the request), but ~9Gi of the manual hostPath volume sits
+    # unused. Raise this to 10Gi to consume the full volume, or shrink the PV to
+    # match if 1Gi is the real intent.
     requests:
       storage: 1Gi
   storageClassName: manual

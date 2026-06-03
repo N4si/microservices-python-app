@@ -5,4 +5,7 @@ metadata:
 data:
   MP3_QUEUE: "mp3"
   VIDEO_QUEUE: "video"
-  MONGODB_URI: "mongodb://nasi:nasi1234@mongodb:27017/mp3s?authSource=admin" #nodeip:nodeport
+  # MONGODB_URI moved to the converter-secret Secret — it embeds the MongoDB
+  # username/password and must not live in a ConfigMap. The env var name is
+  # unchanged; envFrom pulls it from the Secret instead. See
+  # converter-service/manifest/secret.yaml.example.

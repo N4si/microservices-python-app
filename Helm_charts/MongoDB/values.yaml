@@ -1,6 +1,6 @@
 secret:
-  root_username: nasi
-  root_password: nasi1234
-  username: nasi
-  password: nasi1234
-  users_list: nasi
+  root_username: mongouser
+  root_password: MongoSecure2024
+  username: mongouser
+  password: MongoSecure2024
+  users_list: mongouser

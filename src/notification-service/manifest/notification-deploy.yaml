@@ -18,11 +18,46 @@ spec:
       labels:
         app: notification
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+      volumes:
+        - name: tmp-volume
+          emptyDir: {}
       containers:
         - name: notification
-          image: nasi101/notification
+          image: johnbaabalola/notification-service:16f49a0
+          imagePullPolicy: IfNotPresent
           envFrom:
             - configMapRef:
                 name: notification-configmap
             - secretRef:
                 name: notification-secret
+            - secretRef:
+                name: rabbitmq-secret
+          env:
+            # Unbuffered stdout so print() diagnostics reach kubectl logs
+            # immediately, not on a block-buffer flush.
+            - name: PYTHONUNBUFFERED
+              value: "1"
+          volumeMounts:
+            - name: tmp-volume
+              mountPath: /tmp
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "100m"
+              memory: "128Mi"
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          livenessProbe:
+            exec:
+              command: ["test", "-f", "/tmp/healthy"]
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            failureThreshold: 3

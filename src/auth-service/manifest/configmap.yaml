@@ -5,5 +5,5 @@ metadata:
 data:
   DATABASE_HOST: db
   DATABASE_NAME: authdb
-  DATABASE_USER: nasi
+  DATABASE_USER: pguser
   AUTH_TABLE: auth_user
