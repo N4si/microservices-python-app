@@ -1,0 +1,19 @@
+# Copy this file to terraform.tfvars and fill in your values.
+# NEVER commit terraform.tfvars — it is gitignored.
+
+aws_region        = "eu-west-2"
+cluster_name      = "vidcast-cluster"
+node_instance_type = "m7i-flex.large"
+node_min_count    = 1
+node_max_count    = 2
+node_desired_count = 1
+kubernetes_version = "1.31"
+
+# Leave blank to create a new VPC, or provide an existing VPC ID
+vpc_id = ""
+
+# S3 bucket for Terraform remote state (must exist before terraform init)
+state_bucket = "your-terraform-state-bucket"
+
+# DynamoDB table for state locking (must exist before terraform init)
+state_lock_table = "vidcast-terraform-locks"

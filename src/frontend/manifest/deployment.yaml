@@ -1,0 +1,57 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  labels:
+    app: frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: frontend
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+      containers:
+        - name: frontend
+          # Hosted in this account's ECR (the node IAM role can pull it); CI
+          # does not build the frontend, so it is not on Docker Hub like the
+          # backend services. SHA-pinned to the repo commit it was built from.
+          image: 501562869470.dkr.ecr.eu-west-2.amazonaws.com/vidcast-frontend:8582bf1
+          ports:
+            - containerPort: 8080
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "200m"
+              memory: "128Mi"
+          securityContext:
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 3

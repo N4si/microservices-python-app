@@ -6,6 +6,6 @@ service:
 container:
   image: postgres
   env:
-    user: nasi
-    password: cnd2023
+    user: pguser
+    password: PgSecure2024
     db: authdb

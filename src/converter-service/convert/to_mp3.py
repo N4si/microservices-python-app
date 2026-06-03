@@ -1,4 +1,8 @@
-import pika, json, tempfile, os
+import json
+import os
+import tempfile
+
+import pika
 from bson.objectid import ObjectId
 import moviepy.editor
 
@@ -19,10 +23,16 @@ def start(message, fs_videos, fs_mp3s, channel):
     tf_path = tempfile.gettempdir() + f"/{message['video_fid']}.mp3"
     audio.write_audiofile(tf_path)
 
-    # save the file to the mongodb database
+    # save the file to the mongodb database. Copy the owner tag from the video
+    # message onto the mp3 so /my-files and the unseen-count badge can find it;
+    # .get() keeps backward-compat with old messages that have no username.
     f = open(tf_path, "rb")
     data = f.read()
-    fid = fs_mp3s.put(data)
+    fid = fs_mp3s.put(
+        data,
+        filename=f"{message['video_fid']}.mp3",
+        metadata={"owner_email": message.get("username")},
+    )
     f.close()
     os.remove(tf_path)
 
@@ -37,6 +47,6 @@ def start(message, fs_videos, fs_mp3s, channel):
                 delivery_mode=pika.spec.PERSISTENT_DELIVERY_MODE
             ),
         )
-    except Exception as err:
+    except Exception:
         fs_mp3s.delete(fid)
         return "failed to publish message"

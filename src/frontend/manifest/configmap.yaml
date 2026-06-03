@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: frontend-configmap
+data:
+  VITE_API_URL: "/api"
+  VITE_GRAFANA_URL: ""

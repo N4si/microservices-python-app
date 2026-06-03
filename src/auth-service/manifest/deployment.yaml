@@ -18,9 +18,13 @@ spec:
       labels:
         app: auth
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
       containers:
         - name: auth
-          image: nasi101/auth
+          image: johnbaabalola/auth-service:16f49a0
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 5000
           envFrom:
@@ -28,3 +32,29 @@ spec:
                 name: auth-configmap
             - secretRef:
                 name: auth-secret
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "200m"
+              memory: "128Mi"
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 5000
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 5000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 3

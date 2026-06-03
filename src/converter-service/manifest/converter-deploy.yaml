@@ -5,26 +5,58 @@ metadata:
   labels:
     app: converter
 spec:
-  replicas: 4
+  # 2 replicas, not 4: the single m7i-flex.large node (2 vCPU) cannot schedule
+  # 4 converters @ 250m CPU request alongside the other services — they sat
+  # Pending with "Insufficient cpu". 2 replicas is enough for demo throughput;
+  # scale up by adding nodes (raise the node group desired_size) if needed.
+  replicas: 2
   selector:
     matchLabels:
       app: converter
   strategy:
     type: RollingUpdate
     rollingUpdate:
-      maxSurge: 8
+      maxSurge: 1
   template:
     metadata:
       labels:
         app: converter
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+      volumes:
+        - name: tmp-volume
+          emptyDir: {}
       containers:
         - name: converter
-          image: nasi101/converter
+          image: johnbaabalola/converter-service:16f49a0
+          imagePullPolicy: IfNotPresent
           envFrom:
             - configMapRef:
                 name: converter-configmap
             - secretRef:
                 name: converter-secret
-
-    
+            - secretRef:
+                name: rabbitmq-secret
+          volumeMounts:
+            - name: tmp-volume
+              mountPath: /tmp
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          livenessProbe:
+            exec:
+              command: ["test", "-f", "/tmp/healthy"]
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            failureThreshold: 3

@@ -10,6 +10,7 @@ spec:
     matchLabels:
       app: gateway
   strategy:
+    type: RollingUpdate
     rollingUpdate:
       maxSurge: 3
   template:
@@ -17,11 +18,54 @@ spec:
       labels:
         app: gateway
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+      volumes:
+        # Writable scratch dir. readOnlyRootFilesystem is true, but Werkzeug
+        # buffers multipart file uploads to a temp directory; without this the
+        # /upload handler fails with "No usable temporary directory found".
+        - name: tmp-volume
+          emptyDir: {}
       containers:
         - name: gateway
-          image: nasi101/gateway
+          image: johnbaabalola/gateway-service:16f49a0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
           envFrom:
             - configMapRef:
                 name: gateway-configmap
             - secretRef:
                 name: gateway-secret
+            - secretRef:
+                name: rabbitmq-secret
+          volumeMounts:
+            - name: tmp-volume
+              mountPath: /tmp
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "300m"
+              memory: "256Mi"
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 3
