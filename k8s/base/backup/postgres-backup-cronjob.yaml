@@ -1,0 +1,104 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: postgres-backup
+  labels:
+    app: postgres-backup
+    app.kubernetes.io/part-of: vidcast
+    app.kubernetes.io/component: backup
+spec:
+  # Nightly at 02:15 UTC — staggered 15m after the Mongo dump so they don't both
+  # contend for node CPU/network at once.
+  schedule: "15 2 * * *"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 600
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 1800
+      template:
+        metadata:
+          labels:
+            app: postgres-backup
+            app.kubernetes.io/part-of: vidcast
+            app.kubernetes.io/component: backup
+        spec:
+          serviceAccountName: vidcast-backup
+          restartPolicy: OnFailure
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            fsGroup: 1000
+            seccompProfile:
+              type: RuntimeDefault
+          volumes:
+            - name: backup
+              emptyDir: {}
+            - name: home
+              emptyDir: {}
+          # pg_dump → /backup/dump.sql.gz, then the uploader ships it to S3.
+          initContainers:
+            - name: pgdump
+              # Match the running Postgres major (16) so pg_dump's output restores
+              # cleanly; 16.4-alpine is the same tag the Helm chart pins.
+              image: postgres:16.4-alpine
+              command:
+                - /bin/sh
+                - -c
+                - >
+                  pg_dump -h db -p 5432 -U pguser -d authdb | gzip > /backup/dump.sql.gz
+              env:
+                # pg_dump reads the password from PGPASSWORD. The value lives in
+                # auth-secret (DATABASE_PASSWORD) — created by ESO from Parameter
+                # Store (prod) or deploy.sh (dev).
+                - name: PGPASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: auth-secret
+                      key: DATABASE_PASSWORD
+              volumeMounts:
+                - name: backup
+                  mountPath: /backup
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: ["ALL"]
+              resources:
+                requests:
+                  cpu: "100m"
+                  memory: "128Mi"
+                limits:
+                  cpu: "500m"
+                  memory: "256Mi"
+          containers:
+            - name: upload
+              image: amazon/aws-cli:2.15.30
+              command:
+                - /bin/sh
+                - -c
+                - >
+                  aws s3 cp /backup/dump.sql.gz
+                  "s3://${BACKUP_BUCKET}/postgres/postgres-$(date -u +%Y%m%dT%H%M%SZ).sql.gz"
+              env:
+                - name: BACKUP_BUCKET
+                  value: vidcast-backups-501562869470
+                - name: HOME
+                  value: /home
+              volumeMounts:
+                - name: backup
+                  mountPath: /backup
+                - name: home
+                  mountPath: /home
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: ["ALL"]
+              resources:
+                requests:
+                  cpu: "50m"
+                  memory: "64Mi"
+                limits:
+                  cpu: "250m"
+                  memory: "256Mi"

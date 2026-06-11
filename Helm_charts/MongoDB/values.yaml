@@ -1,6 +1,38 @@
+# Credentials are injected at install time from environment variables by deploy.sh
+# (`--set secret.*`) — NEVER commit real passwords here. The CHANGEME placeholders
+# are only used if you `helm install` this chart directly without overriding them;
+# deploy.sh requires MONGODB_USERNAME / MONGODB_PASSWORD and passes them in, keeping
+# secrets out of the (public) repo.
 secret:
-  root_username: nasi
-  root_password: nasi1234
-  username: nasi
-  password: nasi1234
-  users_list: nasi
+  root_username: mongouser
+  root_password: CHANGEME   # deploy.sh: --set secret.root_password=$MONGODB_PASSWORD
+  username: mongouser
+  password: CHANGEME        # deploy.sh: --set secret.password=$MONGODB_PASSWORD
+  users_list: mongouser
+
+# B2 gap-fix (require-requests-limits): right-sized for the demo workload. GridFS
+# chunk writes are memory-hungry during uploads, so memory headroom matters more
+# than CPU here. Review under production load.
+resources:
+  requests:
+    cpu: "100m"
+    memory: "256Mi"
+  limits:
+    cpu: "500m"
+    memory: "512Mi"
+
+# B2 gap-fix (require-labels): `app: database` already exists on the pod template;
+# these add the two remaining Kyverno-required labels.
+labels:
+  environment: prod
+  managedBy: helm
+
+# B2 gap-fix (require-seccomp). NOTE: the official mongo image's entrypoint runs
+# as root to chown /data/db and run initdb — it CANNOT start with runAsNonRoot.
+# That remains a DOCUMENTED require-non-root Audit exception (needs a Kyverno
+# exclude rule before Enforce). Safe subset applied: seccomp + no priv-escalation.
+podSecurityContext:
+  seccompProfile:
+    type: RuntimeDefault
+containerSecurityContext:
+  allowPrivilegeEscalation: false

@@ -1,0 +1,14 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# PROD ESO overlay. Reads /vidcast/prod/* from Parameter Store and materialises
+# the four app Secrets. Apply AFTER the ESO Helm chart is installed:
+#   kubectl apply -k k8s/external-secrets/prod
+namespace: default
+
+resources:
+  - ../shared
+  - externalsecret-auth.yaml
+  - externalsecret-gateway.yaml
+  - externalsecret-converter.yaml
+  - externalsecret-notification.yaml

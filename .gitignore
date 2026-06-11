@@ -1,0 +1,75 @@
+# Terraform
+terraform.tfvars
+terraform.tfvars.json
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+tfplan
+*.tfplan
+crash.log
+
+# Kubernetes secrets
+**/secret.yaml
+# ...except Helm chart secret *templates*, which hold no literal credentials
+# (they reference values.yaml via {{ .Values.secret.* }}) and must be tracked
+# so a clean `helm install` can render the Secret resource.
+!Helm_charts/MongoDB/templates/secret.yaml
+!Helm_charts/RabbitMQ/templates/secret.yaml
+!Helm_charts/Postgres/templates/secret.yaml
+
+# Deployment-specific files
+DEPLOYMENT_CONFIG.md
+# DEPLOYMENT_GUIDE.md is now a tracked runbook + newcomer guide (no secrets;
+# secrets live in DEPLOYMENT_CONFIG.md / Parameter Store).
+DEPLOYMENT_REPORT.md
+SESSION_SUMMARY.md
+DEPLOYMENT_PROBLEMS.md
+deployment-ids.txt
+# customise.sh is now tracked: it auto-detects identity and reads new values from
+# env vars, so it contains no secrets or personal data (it just repoints the repo
+# to your Docker Hub / AWS / GitHub for a fork).
+
+# Local session artifacts / working notes (may contain account IDs, IPs, secrets).
+# Keep on disk, never commit.
+[0-9][0-9]_[0-9][0-9]_[0-9][0-9]_*.md
+FRONTEND_IMPROVEMENTS.md
+VIDCAST_PLAIN_ENGLISH_GUIDE.md
+CLAUDE.md
+PR_DESCRIPTION.md
+
+# Build artifacts
+*.mp3
+!assets/video.mp4
+output.*
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.env
+venv/
+*.egg-info/
+
+# Node
+node_modules/
+dist/
+build/
+.cache/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Explanation files (study material, not production)
+*_EXPLAINED.md

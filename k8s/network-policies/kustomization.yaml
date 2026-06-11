@@ -1,0 +1,21 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# A6 NetworkPolicies. Applied SEPARATELY from the app overlay (these are a security
+# layer over whatever is deployed) and ONLY after the VPC CNI network-policy agent
+# is enabled in Terraform (terraform/modules/eks aws_eks_addon.vpc_cni) — without
+# that agent these policies are accepted but NOT enforced.
+#
+# Ordering: the allow-* policies and default-deny are listed with default-deny LAST.
+# NetworkPolicy is additive (union of allows), so applying the whole set at once is
+# safe; the ordering is belt-and-braces and matches "apply allows first, deny last".
+namespace: default
+
+resources:
+  - allow-dns.yaml
+  - allow-monitoring.yaml
+  - app-policies.yaml
+  - datastore-policies.yaml
+  # I4 backup CronJobs: egress to Mongo/Postgres/AWS + datastore ingress from backup.
+  - allow-backup-egress.yaml
+  - default-deny.yaml

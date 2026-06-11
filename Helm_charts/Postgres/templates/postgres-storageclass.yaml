@@ -1,0 +1,25 @@
+{{- if and .Values.persistence.enabled .Values.persistence.createStorageClass }}
+# gp3 StorageClass backed by the aws-ebs-csi-driver addon (provisioned in
+# terraform/modules/eks). The cluster has no default dynamic StorageClass — the
+# in-tree kubernetes.io/aws-ebs provisioner is gone in k8s 1.31 — so the Postgres
+# PVC needs this to bind.
+#
+# reclaimPolicy: Retain is deliberate (durability, A11): deleting the PVC must NOT
+# delete the underlying EBS volume, so an accidental `helm uninstall` or pod churn
+# can't take user accounts with it. Orphaned volumes are cleaned up manually.
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: {{ .Values.persistence.storageClassName }}
+  labels:
+    app.kubernetes.io/part-of: vidcast
+provisioner: ebs.csi.aws.com
+parameters:
+  type: gp3
+  encrypted: "true"
+reclaimPolicy: Retain
+# WaitForFirstConsumer pins the volume to the AZ where the Postgres pod actually
+# lands, avoiding a cross-AZ attach failure on a multi-subnet cluster.
+volumeBindingMode: WaitForFirstConsumer
+allowVolumeExpansion: true
+{{- end }}

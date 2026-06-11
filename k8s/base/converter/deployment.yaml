@@ -1,0 +1,83 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: converter
+  labels:
+    app: converter
+spec:
+  # 2 replicas, not 4: the single m7i-flex.large node (2 vCPU) cannot schedule
+  # 4 converters @ 250m CPU request alongside the other services — they sat
+  # Pending with "Insufficient cpu". 2 replicas is enough for demo throughput;
+  # scale up by adding nodes (raise the node group desired_size) if needed.
+  # NOTE (A7): KEDA will drive this Deployment's replica count from the RabbitMQ
+  # `video` queue depth (scale-to-zero). The static count here is the floor used
+  # before KEDA is installed / when KEDA is disabled.
+  replicas: 2
+  selector:
+    matchLabels:
+      app: converter
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        app: converter
+    spec:
+      # Disable legacy Docker-link service env vars. The `redis` Service otherwise
+      # injects REDIS_PORT=tcp://<ip>:6379, clobbering the plain "6379" idempotency.py
+      # expects → ValueError at import. This consumer needs no service-link vars.
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        # B2 gap-fix: pod-level so it also covers any future init/sidecar
+        # containers. RuntimeDefault blocks ~44 dangerous syscalls (PSS Restricted)
+        # and satisfies the Kyverno require-seccomp-runtime-default policy.
+        seccompProfile:
+          type: RuntimeDefault
+      volumes:
+        - name: tmp-volume
+          emptyDir: {}
+      containers:
+        - name: converter
+          image: johnbaabalola/converter-service:16f49a0
+          imagePullPolicy: IfNotPresent
+          ports:
+            # B4: prometheus metrics (start_http_server) — scraped by a PodMonitor.
+            - name: metrics
+              containerPort: 9000
+          envFrom:
+            - configMapRef:
+                name: converter-configmap
+            - secretRef:
+                name: converter-secret
+            - secretRef:
+                name: rabbitmq-secret
+          env:
+            # Unbuffered stdout so print() diagnostics reach kubectl logs
+            # immediately, not on a block-buffer flush.
+            - name: PYTHONUNBUFFERED
+              value: "1"
+          volumeMounts:
+            - name: tmp-volume
+              mountPath: /tmp
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          livenessProbe:
+            exec:
+              command: ["test", "-f", "/tmp/healthy"]
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            failureThreshold: 3

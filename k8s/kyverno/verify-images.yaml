@@ -1,0 +1,63 @@
+# WHAT: verifies cosign signatures on VidCast images at admission. ACTIVATED in B5
+#       (was an inert placeholder in B2) — now pointed at the real repos and the real
+#       keyless signing identity, but STILL Audit (reports, never blocks).
+# WHY:  once CI signs images (cosign keyless via GitHub OIDC, A8), this proves a
+#       running container was built by OUR pipeline and not tampered with. Kyverno
+#       checks the signature, the signing identity, and the Rekor log entry.
+#
+# ⚠️ STAYS Audit — do NOT set Enforce until: (1) John's CI cosign-sign job is merged
+# and producing signatures, AND (2) at least one signed image has verified PASS on a
+# live cluster. Until CI signs, the Audit report will show these images as FAIL
+# ("no signature") — that is the EXPECTED, honest "not yet signed" state, not a bug.
+# Promotion checklist + the live PASS/FAIL test are in k8s/kyverno/README.md.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: verify-images
+  annotations:
+    policies.kyverno.io/title: Verify Image Signatures (B5 — Audit)
+    policies.kyverno.io/category: Supply Chain Security
+spec:
+  validationFailureAction: Audit
+  background: false # image verification cannot run as a background scan
+  rules:
+    - name: verify-cosign-keyless
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+      exclude:
+        any:
+          - resources:
+              # Only verify OUR workloads — platform/system images (kyverno, argo,
+              # keda, ESO, monitoring, kube-system) are signed by other identities.
+              namespaces:
+                - kube-system
+                - kube-public
+                - kube-node-lease
+                - kyverno
+                - argocd
+                - keda
+                - external-secrets
+                - monitoring
+      verifyImages:
+        # Both registries, same signer (the repo's CI workflow). Backends live on
+        # Docker Hub; the frontend on ECR. NOTE: if the frontend is signed by a
+        # DIFFERENT workflow file than ci.yml, give it its own attestor entry — the
+        # keyless `subject` is the exact workflow path (see A8 / SUPPLY_CHAIN.md).
+        - imageReferences:
+            - "docker.io/johnbaabalola/*"
+            - "501562869470.dkr.ecr.eu-west-2.amazonaws.com/vidcast-frontend*"
+          # Audit-phase: observe only. Don't rewrite tag→digest yet (flip to true
+          # at Enforce, so admitted pods are pinned to the verified digest).
+          mutateDigest: false
+          attestors:
+            - entries:
+                # Cosign keyless: the identity IS the GitHub Actions OIDC token; the
+                # signature is logged in Rekor. No private key to store. The subject
+                # MUST match A8's documented identity character-for-character.
+                - keyless:
+                    subject: "https://github.com/johnnybabs/vidcast/.github/workflows/ci.yml@refs/heads/main"
+                    issuer: "https://token.actions.githubusercontent.com"
+                    rekor:
+                      url: "https://rekor.sigstore.dev"

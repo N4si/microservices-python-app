@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  labels:
+    app: frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: frontend
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        # B2 gap-fix: pod-level so it also covers any future init/sidecar
+        # containers. RuntimeDefault blocks ~44 dangerous syscalls (PSS Restricted)
+        # and satisfies the Kyverno require-seccomp-runtime-default policy.
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: frontend
+          # Image name is resolved by the overlay `images:` transformer to the
+          # real ECR path + tag (CI does not build the frontend, so it is not on
+          # Docker Hub like the backends). Base uses a bare, transformable name
+          # instead of the old "<AWS_ACCOUNT_ID>.dkr.ecr…" literal placeholder.
+          image: vidcast-frontend:latest
+          ports:
+            - containerPort: 8080
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "200m"
+              memory: "128Mi"
+          securityContext:
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 3

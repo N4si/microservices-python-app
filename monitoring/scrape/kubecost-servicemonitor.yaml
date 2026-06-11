@@ -1,0 +1,24 @@
+# B3: let the existing Prometheus scrape Kubecost's cost-model /metrics, which is
+# where the cost series (node_total_hourly_cost, *_allocation_*) the FinOps
+# dashboard queries come from. Kubecost READS raw metrics from Prometheus and
+# EXPOSES computed cost metrics back — this closes that loop.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: vidcast-kubecost
+  namespace: monitoring
+  labels:
+    release: monitoring
+spec:
+  namespaceSelector:
+    matchNames: ["kubecost"]
+  selector:
+    matchLabels:
+      app: cost-analyzer        # the kubecost cost-analyzer Service/pods
+  endpoints:
+    # cost-model exposes its metrics on the 9003 container port. Verify the exact
+    # named port on the live Service (chart-version dependent) — fall back to the
+    # numeric targetPort if the name differs.
+    - port: tcp-model
+      path: /metrics
+      interval: 60s

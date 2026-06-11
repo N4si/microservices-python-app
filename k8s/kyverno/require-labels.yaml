@@ -1,0 +1,44 @@
+# WHAT: rejects any pod missing the labels `app`, `environment`, and
+#       `app.kubernetes.io/managed-by`.
+# WHY:  unlabelled resources can't be attributed (who owns this?), can't be
+#       cost-allocated (B3 Kubecost groups by label), and can't be targeted by other
+#       policies/selectors. Three labels is the minimum useful set — deliberately NOT
+#       requiring cost-centre/owner yet (the datastore charts don't have them, and we
+#       don't want to drown the Audit report). "managed-by" = the standard
+#       app.kubernetes.io/managed-by, which the A10 overlays already stamp.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-labels
+  annotations:
+    policies.kyverno.io/title: Require Standard Labels
+    policies.kyverno.io/category: Best Practices
+spec:
+  validationFailureAction: Audit
+  background: true
+  rules:
+    - name: require-app-environment-managedby
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+      exclude:
+        any:
+          - resources:
+              namespaces:
+                - kube-system
+                - kube-public
+                - kube-node-lease
+                - kyverno
+                - argocd
+                - keda
+                - external-secrets
+                - monitoring
+      validate:
+        message: "Labels 'app', 'environment', and 'app.kubernetes.io/managed-by' are required."
+        pattern:
+          metadata:
+            labels:
+              app: "?*"
+              environment: "?*"
+              app.kubernetes.io/managed-by: "?*"

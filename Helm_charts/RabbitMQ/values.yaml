@@ -1,3 +1,42 @@
 service:
   name: rabbitmq
   port: 15672
+
+secret:
+  default_user: rabbituser
+  # Injected by deploy.sh: --set secret.default_pass=$RABBITMQ_PASSWORD.
+  # Never commit a real password here (CHANGEME is a no-real-secret placeholder).
+  default_pass: CHANGEME
+
+# B2 gap-fix (require-requests-limits): right-sized for the demo workload —
+# moderate queue depth, two durable queues. Review under production load.
+resources:
+  requests:
+    cpu: "100m"
+    memory: "256Mi"
+  limits:
+    cpu: "500m"
+    memory: "512Mi"
+
+# B2 gap-fix (require-labels): `app: rabbitmq` already exists on the pod template;
+# these add the two remaining Kyverno-required labels.
+labels:
+  environment: prod
+  managedBy: helm
+
+# B2 gap-fix (require-non-root + require-seccomp). UNLIKE mongo/postgres, the
+# rabbitmq image runs cleanly as the non-root `rabbitmq` user (uid 999) when its
+# data dir is group-writable — fsGroup 999 makes the PVC writable by that gid. So
+# rabbitmq FULLY satisfies require-non-root (no Enforce exception needed). Runtime
+# re-verify owed: confirm the broker boots non-root against the existing PVC.
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 999
+  runAsGroup: 999
+  fsGroup: 999
+  seccompProfile:
+    type: RuntimeDefault
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop: ["ALL"]

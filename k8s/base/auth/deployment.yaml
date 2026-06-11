@@ -1,0 +1,74 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auth
+  labels:
+    app: auth
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: auth
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 3
+  template:
+    metadata:
+      labels:
+        app: auth
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        # B2 gap-fix: pod-level so it also covers any future init/sidecar
+        # containers. RuntimeDefault blocks ~44 dangerous syscalls (PSS Restricted)
+        # and satisfies the Kyverno require-seccomp-runtime-default policy.
+        seccompProfile:
+          type: RuntimeDefault
+      volumes:
+        # Writable scratch dir. readOnlyRootFilesystem is true, but gunicorn's
+        # sync workers write a heartbeat temp file (tempfile.mkstemp) and need a
+        # writable temp dir — without this the workers fail to boot (A4).
+        - name: tmp-volume
+          emptyDir: {}
+      containers:
+        - name: auth
+          image: johnbaabalola/auth-service:16f49a0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 5000
+          envFrom:
+            - configMapRef:
+                name: auth-configmap
+            - secretRef:
+                name: auth-secret
+          volumeMounts:
+            - name: tmp-volume
+              mountPath: /tmp
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "200m"
+              memory: "128Mi"
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 5000
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 5000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 3

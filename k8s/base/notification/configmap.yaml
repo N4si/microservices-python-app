@@ -1,0 +1,35 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: notification-configmap
+data:
+  MP3_QUEUE: "mp3"
+  # A3 retry/DLQ tuning. After MAX_RETRIES failed attempts a message goes to the
+  # terminal <queue>.dlq; RETRY_TTL_MS is the delay (ms) a failed message waits in
+  # <queue>.retry before it is re-injected into the main queue.
+  MAX_RETRIES: "3"
+  RETRY_TTL_MS: "30000"
+  # A2 idempotency. "false" (default) = consumers behave exactly as before. "true"
+  # = claim-once on mp3_fid via Redis so a redelivery isn't emailed twice.
+  # IDEMPOTENCY_TTL_SECONDS bounds the dedup window; REDIS_HOST is the in-cluster
+  # Redis Service.
+  IDEMPOTENCY_ENABLED: "false"
+  IDEMPOTENCY_TTL_SECONDS: "300"
+  REDIS_HOST: "redis"
+  # Batch summary email: the notification service reads job_status to know when
+  # a multi-file batch is complete. This default URI has NO credentials, so on an
+  # auth-required mongod the connection fails and the service safely falls back to
+  # one email per file. To ENABLE batch summaries in a live cluster, two infra
+  # additions are needed (out of this code sprint, documented in the assessment):
+  #   1) override MONGODB_URI with the credentialed value in notification-secret
+  #      (mongouser, authSource=admin), mirroring converter-secret — secretRef wins
+  #      over this configmap value, so a real password never lives in this file;
+  #   2) a notification→mongodb:27017 NetworkPolicy egress rule (default-deny blocks
+  #      it today), like Sprint 1's allow-backup-egress.
+  MONGODB_URI: "mongodb://mongodb:27017/videos"
+  # VIDCAST_URL: public web app URL used in notification emails (UX2/B3). Defaults
+  # in code to a dev placeholder; set the real ALB hostname in the prod overlay.
+  VIDCAST_URL: "http://localhost:30006"
+  # VIDEO_QUEUE removed: the notification consumer only reads MP3_QUEUE
+  # (consumer.py consumes os.environ.get("MP3_QUEUE")). The video queue is
+  # consumed exclusively by the converter service, so this value was never read.

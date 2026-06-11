@@ -1,0 +1,18 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Base manifest for the outbox-relay (A1). A single-replica publisher of the
+# MongoDB `outbox` collection to RabbitMQ — no Service (it listens on no port;
+# it is a background poller, like the converter/notification consumers). Liveness
+# is exec-based (test -f /tmp/healthy). No configmap: it reads MONGODB_VIDEOS_URI
+# from gateway-secret and the broker creds from rabbitmq-secret (see deployment).
+resources:
+  - deployment.yaml
+
+labels:
+  - pairs:
+      app.kubernetes.io/name: outbox-relay
+      app.kubernetes.io/component: outbox-relay
+      app.kubernetes.io/part-of: vidcast
+    includeSelectors: false
+    includeTemplates: true

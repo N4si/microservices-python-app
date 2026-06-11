@@ -1,0 +1,15 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# DEV ESO overlay. Reads /vidcast/dev/* from Parameter Store and materialises
+# the four app Secrets. Apply AFTER the ESO Helm chart is installed (the
+# ExternalSecret/ClusterSecretStore CRDs must exist first):
+#   kubectl apply -k k8s/external-secrets/dev
+namespace: default
+
+resources:
+  - ../shared
+  - externalsecret-auth.yaml
+  - externalsecret-gateway.yaml
+  - externalsecret-converter.yaml
+  - externalsecret-notification.yaml

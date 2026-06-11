@@ -1,0 +1,15 @@
+# B4 (M-2 metrics): enable the built-in rabbitmq_prometheus plugin so RabbitMQ
+# exposes Prometheus metrics on :15692/metrics (queue depth, connections, etc.).
+# This OVERRIDES the image's baked enabled_plugins, so it must also re-list
+# rabbitmq_management (the NodePort UI on :15672 the project already relies on).
+#
+# Kept as a SEPARATE ConfigMap from rabbitmq-configmap on purpose: that one is
+# consumed via envFrom (its keys become env vars), and we must NOT turn this file's
+# content into an env var. This one is mounted as a file at /etc/rabbitmq.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rabbitmq-enabled-plugins
+data:
+  enabled_plugins: |
+    [rabbitmq_management,rabbitmq_prometheus].

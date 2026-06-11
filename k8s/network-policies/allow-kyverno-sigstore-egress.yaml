@@ -1,0 +1,68 @@
+# B5 — Sigstore egress for Kyverno's image-verification (verify-images policy).
+#
+# When verify-images evaluates a pod, the Kyverno admission controller must reach:
+#   • the OCI registry    — fetch the image manifest + the cosign `.sig` object
+#                           (registry-1.docker.io for johnbaabalola/*, and the
+#                           <acct>.dkr.ecr.eu-west-2.amazonaws.com ECR frontend repo)
+#   • fulcio.sigstore.dev — verify the short-lived signing certificate
+#   • rekor.sigstore.dev  — verify the signature's transparency-log entry
+#   • tuf-repo-cdn.sigstore.dev — bootstrap trust in the Fulcio/Rekor roots
+# Without egress to these, verification fails with network errors (NOT "unsigned").
+#
+# ⚠️ HONEST LIMITATION: vanilla Kubernetes NetworkPolicy matches egress by IP/CIDR,
+# NOT by hostname — so it CANNOT pin specifically to *.sigstore.dev. The Sigstore
+# services and the public registries live on rotating CDN IPs, so the only
+# expressible rule is "TCP 443 to the public internet", which necessarily also
+# permits the registries Kyverno legitimately needs. True FQDN-level egress pinning
+# (fulcio/rekor/tuf only) requires a CNI with DNS-aware policies (Cilium) or an
+# egress proxy — out of scope; documented in k8s/network-policies/README.md.
+#
+# This is the ALLOW half. The kyverno namespace ships with NO default-deny today
+# (so egress is already open and this is a safe no-op-to-add). Applying THIS policy
+# selects the kyverno pods and restricts their egress to exactly DNS + 443, which is
+# the intended hardening; pair it with a kyverno default-deny when locking the ns
+# down. policyTypes is Egress ONLY — the admission webhook ingress is untouched.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-kyverno-sigstore-egress
+  namespace: kyverno
+spec:
+  podSelector: {} # all Kyverno pods (admission/background/reports controllers)
+  policyTypes:
+    - Egress
+  egress:
+    # DNS — resolve the registry + sigstore hostnames (CoreDNS on EKS).
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # HTTPS to the public internet (Sigstore: fulcio/rekor/tuf-repo-cdn) AND the OCI
+    # registries (Docker Hub, ECR) AND the EKS API endpoint. CIDR-scoped because NP
+    # can't match the hostnames above (see the limitation note).
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - protocol: TCP
+          port: 443
+    # EC2 Instance Metadata Service (IMDS) on :80 — verify-images (B5) pulls from the
+    # PRIVATE ECR repo (vidcast-frontend), and the AWS SDK fetches the node-role
+    # credentials from IMDS to authenticate. Without this the ECR call hangs past the
+    # webhook deadline → "context canceled" → failurePolicy:Fail rejects the admission
+    # of any ECR-image workload. (Public docker.io images need no auth and are
+    # unaffected.) Scoped to the link-local IMDS address only.
+    - to:
+        - ipBlock:
+            cidr: 169.254.169.254/32
+      ports:
+        - protocol: TCP
+          port: 80

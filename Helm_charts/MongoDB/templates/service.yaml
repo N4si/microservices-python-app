@@ -5,9 +5,10 @@ metadata:
   labels:
     app: database
 spec:
-  type: NodePort
+  # I2: ClusterIP only. The datastore is reachable in-cluster (and via
+  # `kubectl port-forward` for admin) but no longer has an external NodePort.
+  type: ClusterIP
   ports:
     - port: 27017
-      nodePort: 30005
   selector:
     app: database

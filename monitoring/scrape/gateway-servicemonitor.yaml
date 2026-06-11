@@ -1,0 +1,21 @@
+# B4 (M-2): scrape the gateway's /metrics (availability + uploads SLO sources).
+# Replaces the old static additionalScrapeConfigs job in monitoring/values.yaml —
+# operator-native, auto-discovers all gateway pod endpoints behind the Service.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: vidcast-gateway
+  namespace: monitoring
+  labels:
+    # kube-prometheus-stack only adopts ServiceMonitors carrying the release label.
+    release: monitoring
+spec:
+  namespaceSelector:
+    matchNames: ["default"]
+  selector:
+    matchLabels:
+      app: gateway
+  endpoints:
+    - port: http          # the named Service port (8080)
+      path: /metrics
+      interval: 30s

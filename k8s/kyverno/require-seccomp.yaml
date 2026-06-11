@@ -1,0 +1,46 @@
+# WHAT: rejects any pod that doesn't set a seccompProfile of type RuntimeDefault
+#       (at pod OR container level).
+# WHY:  seccomp filters which Linux syscalls a container may make. RuntimeDefault
+#       blocks ~44 dangerous/obscure syscalls the app never needs, shrinking the kernel
+#       attack surface available to a compromised container. It is a Pod Security
+#       Standards "Restricted" requirement.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-seccomp-runtime-default
+  annotations:
+    policies.kyverno.io/title: Require seccomp RuntimeDefault
+    policies.kyverno.io/category: Pod Security Standards (Restricted)
+spec:
+  validationFailureAction: Audit
+  background: true
+  rules:
+    - name: require-seccomp-runtime-default
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+      exclude:
+        any:
+          - resources:
+              namespaces:
+                - kube-system
+                - kube-public
+                - kube-node-lease
+                - kyverno
+                - argocd
+                - keda
+                - external-secrets
+                - monitoring
+      validate:
+        message: "seccompProfile.type must be RuntimeDefault (set on the pod or every container)."
+        anyPattern:
+          - spec:
+              securityContext:
+                seccompProfile:
+                  type: RuntimeDefault
+          - spec:
+              containers:
+                - securityContext:
+                    seccompProfile:
+                      type: RuntimeDefault

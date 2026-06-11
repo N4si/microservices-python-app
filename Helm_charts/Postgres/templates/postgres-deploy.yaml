@@ -7,6 +7,14 @@ metadata:
     app: auth-app
 spec:
   replicas: 1
+  {{- if .Values.persistence.enabled }}
+  # An RWO EBS volume attaches to one node at a time. Recreate (not the default
+  # RollingUpdate) tears the old pod down BEFORE starting the new one, so a rollout
+  # doesn't deadlock with the new pod stuck waiting on a still-attached volume.
+  # A single-replica datastore has no availability to lose by recreating.
+  strategy:
+    type: Recreate
+  {{- end }}
   selector:
     matchLabels:
       name: postgres-pod
@@ -17,12 +25,20 @@ spec:
       labels:
         name: postgres-pod
         app: auth-app
+        environment: {{ .Values.labels.environment }}
+        app.kubernetes.io/managed-by: {{ .Values.labels.managedBy }}
     spec:
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
       - name: postgres
         image: {{ .Values.container.image }}
         ports:
         - containerPort: 5432
+        securityContext:
+          {{- toYaml .Values.containerSecurityContext | nindent 10 }}
+        resources:
+          {{- toYaml .Values.resources | nindent 10 }}
         env:
           - name: POSTGRES_USER
             value: {{ .Values.container.env.user }}
@@ -31,5 +47,23 @@ spec:
           - name: POSTGRES_DB
             value: {{ .Values.container.env.db }}
           - name: POSTGRES_HOST_AUTH_METHOD
-            value: trust
+            value: {{ .Values.container.env.authMethod }}
+          {{- if .Values.persistence.enabled }}
+          # initdb refuses to run in the volume root: a fresh EBS volume contains a
+          # lost+found directory, which the entrypoint won't treat as an empty data
+          # dir. Point PGDATA at a subdirectory so first-boot initdb gets a clean path.
+          - name: PGDATA
+            value: /var/lib/postgresql/data/pgdata
+          {{- end }}
+        {{- if .Values.persistence.enabled }}
+        volumeMounts:
+          - name: postgres-data
+            mountPath: /var/lib/postgresql/data
+        {{- end }}
+      {{- if .Values.persistence.enabled }}
+      volumes:
+        - name: postgres-data
+          persistentVolumeClaim:
+            claimName: {{ .Values.persistence.claimName }}
+      {{- end }}
          

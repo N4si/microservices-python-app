@@ -1,0 +1,122 @@
+version: '3.8'
+
+services:
+  auth:
+    image: vidcast/auth:latest
+    ports:
+      - "5000:5000"
+    networks:
+      - vidcast-net
+    environment:
+      DATABASE_HOST: postgres
+      DATABASE_NAME: auth
+      DATABASE_USER: auth_user
+      DATABASE_PORT: "5432"
+      PSQL_PASSWORD: Auth123
+      JWT_SECRET: staging-jwt-secret-change-in-production
+      AUTH_TABLE: auth_user
+    deploy:
+      replicas: 1
+      update_config:
+        failure_action: rollback
+      restart_policy:
+        condition: on-failure
+        max_attempts: 3
+
+  gateway:
+    image: vidcast/gateway:latest
+    ports:
+      - "8080:8080"
+    networks:
+      - vidcast-net
+    environment:
+      MONGODB_VIDEOS_URI: mongodb://mongo:27017/videos
+      MONGODB_MP3S_URI: mongodb://mongo:27017/mp3s
+      RABBITMQ_HOST: rabbitmq
+      AUTH_SVC_ADDRESS: auth:5000
+    deploy:
+      replicas: 2
+      update_config:
+        failure_action: rollback
+      restart_policy:
+        condition: on-failure
+        max_attempts: 3
+
+  converter:
+    image: vidcast/converter:latest
+    networks:
+      - vidcast-net
+    environment:
+      MONGODB_URI: mongodb://mongo:27017
+      RABBITMQ_HOST: rabbitmq
+      VIDEO_QUEUE: video
+      MP3_QUEUE: mp3
+    deploy:
+      replicas: 4
+      update_config:
+        failure_action: rollback
+      restart_policy:
+        condition: on-failure
+        max_attempts: 3
+
+  notification:
+    image: vidcast/notification:latest
+    networks:
+      - vidcast-net
+    environment:
+      RABBITMQ_HOST: rabbitmq
+      MP3_QUEUE: mp3
+      GMAIL_ADDRESS: ""
+      GMAIL_PASSWORD: ""
+    deploy:
+      replicas: 1
+      update_config:
+        failure_action: rollback
+      restart_policy:
+        condition: on-failure
+        max_attempts: 3
+
+  mongo:
+    image: mongo:4.0.8
+    volumes:
+      - mongo-data:/data/db
+    networks:
+      - vidcast-net
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+
+  postgres:
+    image: postgres:14
+    environment:
+      POSTGRES_DB: auth
+      POSTGRES_USER: auth_user
+      POSTGRES_PASSWORD: Auth123
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+    networks:
+      - vidcast-net
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "15672:15672"
+    networks:
+      - vidcast-net
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+
+networks:
+  vidcast-net:
+    driver: overlay
+
+volumes:
+  mongo-data:
+  pg-data:

@@ -1,0 +1,23 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Backup base (I4 / P5). Nightly mongodump + pg_dump CronJobs that ship compressed
+# dumps to the S3 backup bucket, plus the IRSA ServiceAccount they run as. Wired
+# into both overlays (dev + prod) so every environment is recoverable. The restore
+# procedure these feed is in docs/DISASTER_RECOVERY.md.
+#
+# Prerequisites (provisioned by terraform/modules/storage + /eks):
+#   - S3 bucket vidcast-backups-<account_id>
+#   - IAM role vidcast-cluster-backup-irsa (referenced by serviceaccount.yaml)
+#   - the Postgres PVC (A11) — what makes a pg_dump worth keeping
+resources:
+  - serviceaccount.yaml
+  - mongo-backup-cronjob.yaml
+  - postgres-backup-cronjob.yaml
+
+labels:
+  - pairs:
+      app.kubernetes.io/component: backup
+      app.kubernetes.io/part-of: vidcast
+    includeSelectors: false
+    includeTemplates: true

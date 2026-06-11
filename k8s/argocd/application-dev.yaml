@@ -1,0 +1,45 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: vidcast-dev
+  namespace: argocd
+  # The finalizer makes `kubectl delete application` also prune the synced
+  # resources (cascade), rather than orphaning them.
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    # In-repo manifests (Q3 decision: no separate manifest repo). Argo points at
+    # the overlay A10 already built — no reorganisation.
+    repoURL: https://github.com/johnnybabs/vidcast.git
+    targetRevision: main
+    path: k8s/overlays/dev
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: default
+  # Replica counts are owned by autoscalers, not git: KEDA scales `converter`
+  # (0..2, scale-to-zero) and the HPA scales `gateway`. Without this, Argo sees
+  # live replicas != overlay replicas:1 and reports OutOfSync forever — and with
+  # selfHeal it would fight the autoscaler. Ignore /spec/replicas on both so the
+  # autoscaler owns that field and Argo owns everything else.
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      name: converter
+      jsonPointers:
+        - /spec/replicas
+    - group: apps
+      kind: Deployment
+      name: gateway
+      jsonPointers:
+        - /spec/replicas
+  syncPolicy:
+    # DEV = automated. Every commit to main that changes k8s/overlays/dev (or an
+    # image-tag bump) is auto-synced within the controller's poll interval.
+    automated:
+      prune: true # delete resources removed from git
+      selfHeal: true # revert manual kubectl drift back to git
+    syncOptions:
+      - CreateNamespace=false # the `default` namespace already exists
+      - ApplyOutOfSyncOnly=true

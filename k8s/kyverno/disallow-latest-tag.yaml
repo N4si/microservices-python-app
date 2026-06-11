@@ -1,0 +1,53 @@
+# WHAT: rejects containers whose image is untagged or uses the `:latest` tag.
+# WHY:  `:latest` (and untagged, which means latest) is a moving target — you can't
+#       tell what version is actually running, rollbacks aren't reproducible, and two
+#       pods created minutes apart can run different code. Pin an immutable tag/digest.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: disallow-latest-tag
+  annotations:
+    policies.kyverno.io/title: Disallow Latest Tag
+    policies.kyverno.io/category: Best Practices
+spec:
+  validationFailureAction: Audit # Sprint 3 = Audit only; promote to Enforce later
+  background: true
+  rules:
+    - name: require-image-tag
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+      exclude:
+        any:
+          - resources:
+              namespaces: &platformNs
+                - kube-system
+                - kube-public
+                - kube-node-lease
+                - kyverno
+                - argocd
+                - keda
+                - external-secrets
+                - monitoring
+      validate:
+        message: "An explicit image tag is required (untagged images default to :latest)."
+        pattern:
+          spec:
+            containers:
+              - image: "*:*"
+    - name: disallow-latest-tag
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+      exclude:
+        any:
+          - resources:
+              namespaces: *platformNs
+      validate:
+        message: "Using the mutable ':latest' tag is not allowed; pin a specific version."
+        pattern:
+          spec:
+            containers:
+              - image: "!*:latest"

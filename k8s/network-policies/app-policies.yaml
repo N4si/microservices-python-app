@@ -1,0 +1,204 @@
+# A6 — per-application allow rules (the exceptions to default-deny). Each policy
+# names the minimum ingress a pod accepts and the egress it needs. DNS egress for
+# all pods is in allow-dns.yaml; datastore *ingress* is in datastore-policies.yaml.
+# Every A→B flow needs BOTH an egress rule on A (here) and an ingress rule on B.
+---
+# GATEWAY — public API. Ingress on 8080 from anywhere (it is exposed via NodePort
+# 30002 to browsers AND proxied by the frontend). Egress to auth, mongodb (GridFS +
+# outbox), and rabbitmq (direct publish, or outbox path).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: gateway
+  namespace: default
+spec:
+  podSelector:
+    matchLabels:
+      app: gateway
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - ports: # no `from` => any source (public NodePort + frontend proxy)
+        - protocol: TCP
+          port: 8080
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: auth
+      ports:
+        - protocol: TCP
+          port: 5000
+    - to:
+        - podSelector:
+            matchLabels:
+              app: database # MongoDB
+      ports:
+        - protocol: TCP
+          port: 27017
+    - to:
+        - podSelector:
+            matchLabels:
+              app: rabbitmq
+      ports:
+        - protocol: TCP
+          port: 5672
+---
+# AUTH — ingress from gateway on 5000; egress to PostgreSQL.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: auth
+  namespace: default
+spec:
+  podSelector:
+    matchLabels:
+      app: auth
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: gateway
+      ports:
+        - protocol: TCP
+          port: 5000
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: auth-app # PostgreSQL
+      ports:
+        - protocol: TCP
+          port: 5432
+---
+# FRONTEND — public web UI. Ingress on 8080 from anywhere (NodePort 30006). Egress
+# to gateway (nginx proxies /api/ -> gateway:8080).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: frontend
+  namespace: default
+spec:
+  podSelector:
+    matchLabels:
+      app: frontend
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - ports:
+        - protocol: TCP
+          port: 8080
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: gateway
+      ports:
+        - protocol: TCP
+          port: 8080
+---
+# CONVERTER — queue consumer (no ingress). Egress to rabbitmq (consume video +
+# publish mp3 + retry/dlx), mongodb (read video / write mp3), redis (A2 idempotency).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: converter
+  namespace: default
+spec:
+  podSelector:
+    matchLabels:
+      app: converter
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: rabbitmq
+      ports:
+        - protocol: TCP
+          port: 5672
+    - to:
+        - podSelector:
+            matchLabels:
+              app: database
+      ports:
+        - protocol: TCP
+          port: 27017
+    - to:
+        - podSelector:
+            matchLabels:
+              app: redis
+      ports:
+        - protocol: TCP
+          port: 6379
+---
+# NOTIFICATION — queue consumer (no ingress). Egress to rabbitmq, redis (A2), and
+# external SMTP (Gmail :587). SMTP is to 0.0.0.0/0:587 because Gmail's IPs are
+# dynamic; nothing internal listens on 587 so this opens no in-cluster path.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: notification
+  namespace: default
+spec:
+  podSelector:
+    matchLabels:
+      app: notification
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: rabbitmq
+      ports:
+        - protocol: TCP
+          port: 5672
+    - to:
+        - podSelector:
+            matchLabels:
+              app: redis
+      ports:
+        - protocol: TCP
+          port: 6379
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - protocol: TCP
+          port: 587 # SMTP submission (Gmail)
+---
+# OUTBOX-RELAY (A1) — poller, no ingress. Egress to mongodb (read outbox) and
+# rabbitmq (publish).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: outbox-relay
+  namespace: default
+spec:
+  podSelector:
+    matchLabels:
+      app: outbox-relay
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: database
+      ports:
+        - protocol: TCP
+          port: 27017
+    - to:
+        - podSelector:
+            matchLabels:
+              app: rabbitmq
+      ports:
+        - protocol: TCP
+          port: 5672

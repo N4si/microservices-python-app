@@ -1,0 +1,17 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Base manifests for the converter-service (Pika + MoviePy/ffmpeg, queue
+# consumer — no Service). Reads the `video` queue, writes mp3 to GridFS,
+# publishes to the `mp3` queue. Liveness is exec-based (test -f /tmp/healthy).
+resources:
+  - deployment.yaml
+  - configmap.yaml
+
+labels:
+  - pairs:
+      app.kubernetes.io/name: converter
+      app.kubernetes.io/component: converter-service
+      app.kubernetes.io/part-of: vidcast
+    includeSelectors: false
+    includeTemplates: true

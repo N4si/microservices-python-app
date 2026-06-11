@@ -1,0 +1,81 @@
+{
+  "title": "VidCast FinOps / Cost",
+  "uid": "vidcast-finops",
+  "tags": ["vidcast", "finops", "cost"],
+  "timezone": "browser",
+  "refresh": "1m",
+  "schemaVersion": 36,
+  "panels": [
+    {
+      "id": 100,
+      "type": "text",
+      "title": "",
+      "gridPos": {"h": 4, "w": 24, "x": 0, "y": 0},
+      "options": {
+        "mode": "markdown",
+        "content": "## VidCast cost (Kubecost OSS estimates)\n**Kubecost estimates; the AWS Cost Explorer bill is ground truth.** Node-cost model is based on instance list pricing — m7i-flex.large @ **~$0.106/hr** (eu-west-2 on-demand; verify current pricing). Cost-per-conversion = cluster $/hr ÷ conversions/hr (uses the B4 `vidcast_conversions_total` counter). Trend/30-day panels are bounded by Prometheus **7d retention**. Namespace cost = CPU-share approximation; the Kubecost UI has precise allocation."
+      }
+    },
+    {
+      "id": 1,
+      "title": "Cluster cost ($/hr)",
+      "type": "stat",
+      "gridPos": {"h": 5, "w": 6, "x": 0, "y": 4},
+      "fieldConfig": {"defaults": {"unit": "currencyUSD", "decimals": 3}},
+      "options": {"colorMode": "value", "reduceOptions": {"calcs": ["last"]}},
+      "targets": [{"expr": "sum(node_total_hourly_cost)", "legendFormat": "$/hr"}]
+    },
+    {
+      "id": 2,
+      "title": "Projected monthly cost",
+      "type": "stat",
+      "gridPos": {"h": 5, "w": 6, "x": 6, "y": 4},
+      "fieldConfig": {"defaults": {"unit": "currencyUSD", "decimals": 0}},
+      "options": {"colorMode": "value", "reduceOptions": {"calcs": ["last"]}},
+      "targets": [{"expr": "sum(node_total_hourly_cost) * 730", "legendFormat": "$/mo"}]
+    },
+    {
+      "id": 3,
+      "title": "⭐ Cost per conversion",
+      "type": "stat",
+      "gridPos": {"h": 5, "w": 6, "x": 12, "y": 4},
+      "fieldConfig": {"defaults": {"unit": "currencyUSD", "decimals": 4}},
+      "options": {"colorMode": "background", "reduceOptions": {"calcs": ["last"]}},
+      "targets": [{"expr": "sum(node_total_hourly_cost) / clamp_min(sum(rate(vidcast_conversions_total{status=\"success\"}[1h])) * 3600, 1)", "legendFormat": "$/conversion"}]
+    },
+    {
+      "id": 4,
+      "title": "Conversions / hour",
+      "type": "stat",
+      "gridPos": {"h": 5, "w": 6, "x": 18, "y": 4},
+      "fieldConfig": {"defaults": {"unit": "none", "decimals": 1}},
+      "options": {"colorMode": "value", "reduceOptions": {"calcs": ["last"]}},
+      "targets": [{"expr": "sum(rate(vidcast_conversions_total{status=\"success\"}[1h])) * 3600", "legendFormat": "conv/hr"}]
+    },
+    {
+      "id": 5,
+      "title": "Cluster cost trend ($/hr, ≤7d)",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 9},
+      "fieldConfig": {"defaults": {"unit": "currencyUSD", "custom": {"drawStyle": "line", "fillOpacity": 10}}},
+      "targets": [{"expr": "sum(node_total_hourly_cost)", "legendFormat": "cluster $/hr"}]
+    },
+    {
+      "id": 6,
+      "title": "CPU usage by workload (cost proxy)",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 9},
+      "fieldConfig": {"defaults": {"unit": "none", "custom": {"drawStyle": "line", "fillOpacity": 10, "stacking": {"mode": "normal"}}}},
+      "targets": [{"expr": "sum by (pod) (rate(container_cpu_usage_seconds_total{namespace=\"default\", container!=\"\"}[5m]))", "legendFormat": "{{pod}}"}]
+    },
+    {
+      "id": 7,
+      "title": "Estimated monthly cost by namespace (CPU-share approx.)",
+      "type": "bargauge",
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 17},
+      "fieldConfig": {"defaults": {"unit": "currencyUSD", "decimals": 0}},
+      "options": {"orientation": "horizontal", "displayMode": "gradient", "reduceOptions": {"calcs": ["last"]}},
+      "targets": [{"expr": "sum by (namespace) (rate(container_cpu_usage_seconds_total{container!=\"\"}[1h])) / scalar(sum(rate(container_cpu_usage_seconds_total{container!=\"\"}[1h]))) * scalar(sum(node_total_hourly_cost)) * 730", "legendFormat": "{{namespace}}"}]
+    }
+  ]
+}

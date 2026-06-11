@@ -1,0 +1,19 @@
+# B4 (M-2): scrape the notification consumer's metrics (end-to-end SLO numerator).
+# PodMonitor for the same reason as the converter — no Service, scrape pods directly.
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: vidcast-notification
+  namespace: monitoring
+  labels:
+    release: monitoring
+spec:
+  namespaceSelector:
+    matchNames: ["default"]
+  selector:
+    matchLabels:
+      app: notification
+  podMetricsEndpoints:
+    - port: metrics       # the named containerPort (9000)
+      path: /metrics
+      interval: 30s

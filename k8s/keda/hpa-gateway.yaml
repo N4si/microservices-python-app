@@ -1,0 +1,25 @@
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: gateway-hpa
+  namespace: default
+spec:
+  # Targets the GATEWAY deployment ONLY (distinct from the KEDA ScaledObject,
+  # which targets the converter). A plain built-in HPA — no KEDA dependency.
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: gateway
+  minReplicas: 1
+  maxReplicas: 3
+  metrics:
+    # CPU utilisation as a % of the gateway's CPU *request* (100m). Requires
+    # metrics-server in the cluster. The gateway is the synchronous, user-facing
+    # request tier, so CPU is the right scale signal (vs queue depth for the async
+    # converter).
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70

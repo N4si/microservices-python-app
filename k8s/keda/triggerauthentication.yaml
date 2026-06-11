@@ -1,0 +1,17 @@
+apiVersion: keda.sh/v1alpha1
+kind: TriggerAuthentication
+metadata:
+  name: keda-rabbitmq-auth
+  namespace: default
+spec:
+  # KEDA's rabbitmq scaler needs a full connection string (it embeds credentials),
+  # so it must come from a Secret, not ScaledObject metadata. The `host` parameter
+  # maps to the `host` key of keda-rabbitmq-secret (see secret.yaml.example).
+  #
+  # The stock rabbitmq-secret only holds RABBITMQ_DEFAULT_USER/PASS, not a combined
+  # amqp URI, which is why this dedicated secret exists. With ESO (A9) this becomes
+  # an ExternalSecret pulling /vidcast/<env>/keda/rabbitmq-host from Parameter Store.
+  secretTargetRef:
+    - parameter: host
+      name: keda-rabbitmq-secret
+      key: host

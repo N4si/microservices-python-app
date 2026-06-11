@@ -1,0 +1,10 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Env-agnostic ESO plumbing: the ServiceAccount (IRSA) and the cluster-scoped
+# ClusterSecretStore. Referenced by both the dev/ and prod/ overlays. Applying
+# it twice is idempotent (only one env's ExternalSecrets are applied at a time
+# on the single cluster).
+resources:
+  - serviceaccount.yaml
+  - cluster-secret-store.yaml

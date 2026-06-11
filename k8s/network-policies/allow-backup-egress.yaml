@@ -1,0 +1,92 @@
+# Network exceptions for the backup CronJobs (mongo-backup, postgres-backup).
+#
+# Under default-deny (ingress AND egress), a backup pod can do nothing until both
+# ends of each connection are allowed:
+#   - the backup pod's EGRESS to the datastore / AWS, and
+#   - the datastore's INGRESS from the backup pod.
+# The existing datastore-policies.yaml only allows the app clients (gateway,
+# converter, auth, ...) into Mongo/Postgres — not the backup pods — so without this
+# file mongodump/pg_dump hang and the aws-cli upload CrashLoops (no path to STS/S3).
+#
+# Backup pods are selected by app.kubernetes.io/component: backup (set on both
+# CronJob pod templates).
+---
+# Egress: backup pods → Mongo (27017), Postgres (5432), and AWS over HTTPS (443).
+# 0.0.0.0/0:443 is for AWS STS (IRSA AssumeRoleWithWebIdentity) + S3 (object PUT);
+# AWS IP ranges are large/dynamic, so this mirrors the existing 0.0.0.0/0 egress
+# pattern used for Gmail SMTP (app-policies) and sigstore (allow-kyverno-sigstore).
+# DNS (53) is already granted to every pod by allow-dns.yaml.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: backup-egress
+  namespace: default
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: backup
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: database # MongoDB
+      ports:
+        - protocol: TCP
+          port: 27017
+    - to:
+        - podSelector:
+            matchLabels:
+              app: auth-app # PostgreSQL
+      ports:
+        - protocol: TCP
+          port: 5432
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - protocol: TCP
+          port: 443 # AWS STS + S3 (HTTPS)
+---
+# Ingress: let the backup pods into MongoDB (mongodump). Additive to mongodb-ingress.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: mongodb-ingress-backup
+  namespace: default
+spec:
+  podSelector:
+    matchLabels:
+      app: database
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: backup
+      ports:
+        - protocol: TCP
+          port: 27017
+---
+# Ingress: let the backup pods into PostgreSQL (pg_dump). Additive to postgres-ingress.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: postgres-ingress-backup
+  namespace: default
+spec:
+  podSelector:
+    matchLabels:
+      app: auth-app
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: backup
+      ports:
+        - protocol: TCP
+          port: 5432

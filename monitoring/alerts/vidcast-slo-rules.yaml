@@ -1,0 +1,155 @@
+# B4 — SLO burn-rate rules (multi-window, multi-burn-rate; Google SRE workbook).
+#
+# Burn rates are RECORDED already NORMALISED (error-ratio ÷ (1−SLO)), so a value of
+# 1 means "consuming budget exactly at the sustainable rate" and 14 means "14× too
+# fast". That makes the alert thresholds literally `> 14` (fast) and `> 1` (slow),
+# and lets the Grafana error-budget dashboard reuse the same series.
+#
+# Each alert is MULTI-WINDOW: a long window (1h fast / 6h slow) sets the severity,
+# a short window (5m fast / 30m slow) must ALSO be burning — this is what stops a
+# long-window alert from latching on after the incident is over (the short window
+# recovers fast and clears the alert).
+#
+# SLO budget factors (1 − target):  availability 0.001 (99.9%) · conversion_latency
+# 0.05 (95%) · e2e_success 0.01 (99%).  See SLO.md for budgets + the single-node
+# "demonstrative target" caveat.
+#
+# NOTE: division by a zero scrape-rate (no traffic) yields NaN; NaN > N is false, so
+# the alerts simply stay quiet when idle — correct for a demo cluster.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: vidcast-slo-rules
+  namespace: monitoring
+  labels:
+    release: monitoring
+spec:
+  groups:
+    # ───────────────────────── recording rules ─────────────────────────
+    - name: vidcast.slo.availability.recording
+      interval: 30s
+      rules:
+        - record: slo:availability:burnrate5m
+          expr: |
+            (sum(rate(vidcast_gateway_requests_total{status=~"5.."}[5m]))
+             / sum(rate(vidcast_gateway_requests_total[5m]))) / 0.001
+        - record: slo:availability:burnrate30m
+          expr: |
+            (sum(rate(vidcast_gateway_requests_total{status=~"5.."}[30m]))
+             / sum(rate(vidcast_gateway_requests_total[30m]))) / 0.001
+        - record: slo:availability:burnrate1h
+          expr: |
+            (sum(rate(vidcast_gateway_requests_total{status=~"5.."}[1h]))
+             / sum(rate(vidcast_gateway_requests_total[1h]))) / 0.001
+        - record: slo:availability:burnrate6h
+          expr: |
+            (sum(rate(vidcast_gateway_requests_total{status=~"5.."}[6h]))
+             / sum(rate(vidcast_gateway_requests_total[6h]))) / 0.001
+
+    - name: vidcast.slo.conversion_latency.recording
+      interval: 30s
+      rules:
+        # "bad" = fraction of conversions slower than the 5-minute (300s) bucket.
+        # le=~"300(\.0)?" tolerates int vs float bucket-label rendering by the client.
+        - record: slo:conversion_latency:burnrate5m
+          expr: |
+            (1 - (sum(rate(vidcast_conversion_duration_seconds_bucket{le=~"300(\\.0)?"}[5m]))
+                  / sum(rate(vidcast_conversion_duration_seconds_count[5m])))) / 0.05
+        - record: slo:conversion_latency:burnrate30m
+          expr: |
+            (1 - (sum(rate(vidcast_conversion_duration_seconds_bucket{le=~"300(\\.0)?"}[30m]))
+                  / sum(rate(vidcast_conversion_duration_seconds_count[30m])))) / 0.05
+        - record: slo:conversion_latency:burnrate1h
+          expr: |
+            (1 - (sum(rate(vidcast_conversion_duration_seconds_bucket{le=~"300(\\.0)?"}[1h]))
+                  / sum(rate(vidcast_conversion_duration_seconds_count[1h])))) / 0.05
+        - record: slo:conversion_latency:burnrate6h
+          expr: |
+            (1 - (sum(rate(vidcast_conversion_duration_seconds_bucket{le=~"300(\\.0)?"}[6h]))
+                  / sum(rate(vidcast_conversion_duration_seconds_count[6h])))) / 0.05
+
+    - name: vidcast.slo.e2e_success.recording
+      interval: 30s
+      rules:
+        # "bad" = fraction of accepted uploads that did NOT result in a sent email.
+        # Best evaluated over long windows: uploads and sends are minutes apart, so
+        # short windows are noisy (can briefly exceed 1). See SLO.md caveat.
+        - record: slo:e2e_success:burnrate5m
+          expr: |
+            (1 - (sum(rate(vidcast_notifications_total{status="success"}[5m]))
+                  / sum(rate(vidcast_uploads_total[5m])))) / 0.01
+        - record: slo:e2e_success:burnrate30m
+          expr: |
+            (1 - (sum(rate(vidcast_notifications_total{status="success"}[30m]))
+                  / sum(rate(vidcast_uploads_total[30m])))) / 0.01
+        - record: slo:e2e_success:burnrate1h
+          expr: |
+            (1 - (sum(rate(vidcast_notifications_total{status="success"}[1h]))
+                  / sum(rate(vidcast_uploads_total[1h])))) / 0.01
+        - record: slo:e2e_success:burnrate6h
+          expr: |
+            (1 - (sum(rate(vidcast_notifications_total{status="success"}[6h]))
+                  / sum(rate(vidcast_uploads_total[6h])))) / 0.01
+
+    # ───────────────────────── burn-rate alerts ─────────────────────────
+    - name: vidcast.slo.alerts
+      rules:
+        # Availability (99.9%)
+        - alert: VidcastAvailabilityFastBurn
+          expr: slo:availability:burnrate1h > 14 and slo:availability:burnrate5m > 14
+          for: 2m
+          labels:
+            severity: critical
+            slo: availability
+          annotations:
+            summary: "Availability error budget burning 14× (fast)"
+            description: "Gateway 5xx rate is consuming the 30-day availability budget 14× too fast (1h & 5m windows). At this rate the 43.2-min budget is gone in ~3h. Runbook: SLO.md §Availability."
+        - alert: VidcastAvailabilitySlowBurn
+          expr: slo:availability:burnrate6h > 1 and slo:availability:burnrate30m > 1
+          for: 15m
+          labels:
+            severity: warning
+            slo: availability
+          annotations:
+            summary: "Availability error budget burning ≥1× (slow)"
+            description: "Gateway 5xx rate is over the sustainable burn rate (6h & 30m windows). The budget will be exhausted before the 30-day window resets if this continues. Runbook: SLO.md §Availability."
+
+        # Conversion latency (95% < 5 min)
+        - alert: VidcastConversionLatencyFastBurn
+          expr: slo:conversion_latency:burnrate1h > 14 and slo:conversion_latency:burnrate5m > 14
+          for: 2m
+          labels:
+            severity: critical
+            slo: conversion_latency
+          annotations:
+            summary: "Conversion-latency budget burning 14× (fast)"
+            description: "Far more than 5% of conversions are exceeding 5 minutes (1h & 5m windows). Check converter saturation / KEDA scaling / queue backlog. Runbook: SLO.md §Conversion-latency."
+        - alert: VidcastConversionLatencySlowBurn
+          expr: slo:conversion_latency:burnrate6h > 1 and slo:conversion_latency:burnrate30m > 1
+          for: 15m
+          labels:
+            severity: warning
+            slo: conversion_latency
+          annotations:
+            summary: "Conversion-latency budget burning ≥1× (slow)"
+            description: "The fraction of conversions slower than 5 minutes is over budget (6h & 30m windows). Runbook: SLO.md §Conversion-latency."
+
+        # End-to-end success (99% upload → email)
+        - alert: VidcastE2ESuccessFastBurn
+          expr: slo:e2e_success:burnrate1h > 14 and slo:e2e_success:burnrate5m > 14
+          for: 5m
+          labels:
+            severity: critical
+            slo: e2e_success
+          annotations:
+            summary: "End-to-end success budget burning 14× (fast)"
+            description: "Uploads are not turning into notification emails at >14× the budget rate (1h & 5m windows). Check the converter→mp3→notification pipeline + DLQs. Runbook: SLO.md §End-to-end-success."
+        - alert: VidcastE2ESuccessSlowBurn
+          expr: slo:e2e_success:burnrate6h > 1 and slo:e2e_success:burnrate30m > 1
+          for: 30m
+          labels:
+            severity: warning
+            slo: e2e_success
+          annotations:
+            summary: "End-to-end success budget burning ≥1× (slow)"
+            description: "A sustained fraction of uploads are not producing emails (6h & 30m windows). Runbook: SLO.md §End-to-end-success."

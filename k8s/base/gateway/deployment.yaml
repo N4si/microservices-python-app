@@ -1,0 +1,86 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gateway
+  labels:
+    app: gateway
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: gateway
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 3
+  template:
+    metadata:
+      labels:
+        app: gateway
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        # B2 gap-fix: pod-level so it also covers any future init/sidecar
+        # containers. RuntimeDefault blocks ~44 dangerous syscalls (PSS Restricted)
+        # and satisfies the Kyverno require-seccomp-runtime-default policy.
+        seccompProfile:
+          type: RuntimeDefault
+      volumes:
+        # Writable scratch dir. readOnlyRootFilesystem is true, but Werkzeug
+        # buffers multipart file uploads to a temp directory; without this the
+        # /upload handler fails with "No usable temporary directory found".
+        - name: tmp-volume
+          emptyDir: {}
+      containers:
+        - name: gateway
+          image: johnbaabalola/gateway-service:16f49a0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: gateway-configmap
+            - secretRef:
+                name: gateway-secret
+            - secretRef:
+                name: rabbitmq-secret
+          env:
+            # Unbuffered stdout so print() (e.g. the admin role-change audit log)
+            # reaches kubectl logs immediately, not on a block-buffer flush.
+            - name: PYTHONUNBUFFERED
+              value: "1"
+            # B4: prometheus-client multiprocess sample dir. Lives on the writable
+            # /tmp emptyDir (readOnlyRootFilesystem is true); the 2 gunicorn workers
+            # write here and /metrics aggregates across them.
+            - name: PROMETHEUS_MULTIPROC_DIR
+              value: /tmp/prometheus
+          volumeMounts:
+            - name: tmp-volume
+              mountPath: /tmp
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "300m"
+              memory: "256Mi"
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 3

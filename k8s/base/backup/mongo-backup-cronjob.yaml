@@ -1,0 +1,119 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: mongo-backup
+  labels:
+    app: mongo-backup
+    app.kubernetes.io/part-of: vidcast
+    app.kubernetes.io/component: backup
+spec:
+  # Nightly at 02:00 UTC (off-peak). RPO is therefore up to ~24h — documented in
+  # docs/DISASTER_RECOVERY.md.
+  schedule: "0 2 * * *"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 600
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      # Don't let a stuck dump run forever and overlap the next night.
+      activeDeadlineSeconds: 3600
+      template:
+        metadata:
+          labels:
+            app: mongo-backup
+            app.kubernetes.io/part-of: vidcast
+            app.kubernetes.io/component: backup
+        spec:
+          serviceAccountName: vidcast-backup
+          restartPolicy: OnFailure
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            # fsGroup makes the shared emptyDir writable by the non-root uid the
+            # dump + upload containers run as.
+            fsGroup: 1000
+            seccompProfile:
+              type: RuntimeDefault
+          volumes:
+            # Scratch space the dump is written to and the uploader reads from.
+            - name: backup
+              emptyDir: {}
+            # Writable HOME for the AWS CLI's cache (it runs read-only-root otherwise).
+            - name: home
+              emptyDir: {}
+          # initContainer dumps Mongo to /backup/dump.gz; it must finish before the
+          # uploader runs. A dump failure fails the init step → the Job retries.
+          initContainers:
+            - name: mongodump
+              # Same image family as the running mongod (mongo:4.2) so mongodump's
+              # archive format matches what mongorestore expects on restore.
+              image: mongo:4.2
+              command:
+                - /bin/sh
+                - -c
+                # Dump the two application databases (videos + mp3s) — together they
+                # hold every GridFS file and the outbox collection. Each URI pins to
+                # its db, so we run mongodump twice into separate archives.
+                - >
+                  mongodump --uri="$MONGODB_VIDEOS_URI" --gzip --archive=/backup/videos.gz &&
+                  mongodump --uri="$MONGODB_MP3S_URI"   --gzip --archive=/backup/mp3s.gz
+              envFrom:
+                # Use the app's OWN mongo credentials (gateway-secret, ESO-synced) —
+                # the exact URIs the gateway/converter authenticate with. The
+                # mongodb-secret root creds are NOT usable here: that secret's password
+                # is out of sync with the running mongod (root auth fails SCRAM-SHA-256;
+                # only the app URIs authenticate). Provides MONGODB_VIDEOS_URI / _MP3S_URI.
+                - secretRef:
+                    name: gateway-secret
+              volumeMounts:
+                - name: backup
+                  mountPath: /backup
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: ["ALL"]
+              resources:
+                requests:
+                  cpu: "100m"
+                  memory: "128Mi"
+                limits:
+                  cpu: "500m"
+                  memory: "512Mi"
+          containers:
+            - name: upload
+              image: amazon/aws-cli:2.15.30
+              # Date-stamp the S3 keys so each night is a distinct pair of objects
+              # (bucket versioning + the 30-day lifecycle handle retention). One
+              # shared timestamp keeps the videos/mp3s archives of a run together.
+              command:
+                - /bin/sh
+                - -c
+                - >
+                  TS=$(date -u +%Y%m%dT%H%M%SZ);
+                  aws s3 cp /backup/videos.gz "s3://${BACKUP_BUCKET}/mongo/videos-${TS}.archive.gz" &&
+                  aws s3 cp /backup/mp3s.gz   "s3://${BACKUP_BUCKET}/mongo/mp3s-${TS}.archive.gz"
+              env:
+                # Deterministic bucket name (vidcast-backups-<account_id>). If you
+                # change terraform/modules/storage bucket_prefix, update this.
+                - name: BACKUP_BUCKET
+                  value: vidcast-backups-501562869470
+                - name: HOME
+                  value: /home
+              volumeMounts:
+                - name: backup
+                  mountPath: /backup
+                - name: home
+                  mountPath: /home
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: ["ALL"]
+              resources:
+                requests:
+                  cpu: "50m"
+                  memory: "64Mi"
+                limits:
+                  cpu: "250m"
+                  memory: "256Mi"

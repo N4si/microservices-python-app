@@ -1,0 +1,29 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: vidcast-prod
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/johnnybabs/vidcast.git
+    targetRevision: main
+    path: k8s/overlays/prod
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: default
+  syncPolicy:
+    # PROD = MANUAL. There is deliberately NO `automated:` block. This IS the
+    # approval gate: a prod deploy happens only when a human merges the image-tag
+    # bump PR (which Argo then shows as OutOfSync) and clicks Sync / runs
+    # `argocd app sync vidcast-prod`. Do not add `automated:` here.
+    syncOptions:
+      - CreateNamespace=false
+      - ApplyOutOfSyncOnly=true
+# NOTE (single-cluster caveat): vidcast-dev and vidcast-prod both target the
+# `default` namespace on the same cluster, so they manage the same-named resources
+# and must NOT be synced simultaneously. On this demo cluster you run ONE at a time
+# (dev for validation, prod for the live footprint). In a real setup the two
+# Applications target different clusters via destination.server. See GITOPS.md.

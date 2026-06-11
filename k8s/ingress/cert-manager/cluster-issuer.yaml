@@ -1,0 +1,28 @@
+# cert-manager ClusterIssuer (Let's Encrypt production).
+#
+# NOTE ON HOW THIS FITS THE ALB PATH: the ALB terminates TLS with an ACM
+# certificate (see k8s/ingress/vidcast-ingress.yaml certificate-arn), NOT with a
+# cert-manager-issued Kubernetes secret — an ALB cannot read in-cluster TLS
+# secrets. This issuer is therefore provided as the ALTERNATIVE path: use it if you
+# switch to an in-cluster ingress controller (e.g. ingress-nginx) that consumes k8s
+# TLS secrets, or to issue/renew a cert via DNS-01 that you then import into ACM.
+# For the default ALB+ACM path you do not need to install cert-manager at all.
+#
+# PLACEHOLDER filled at deploy time: ${ALERT_EMAIL} (from DEPLOYMENT_CONFIG.md) —
+# Let's Encrypt sends expiry/issuance notices here.
+#
+# Prereq if used: helm install cert-manager jetstack/cert-manager --set installCRDs=true
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-prod
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: "${ALERT_EMAIL}"
+    privateKeySecretRef:
+      name: letsencrypt-prod-key
+    solvers:
+      - http01:
+          ingress:
+            ingressClassName: alb

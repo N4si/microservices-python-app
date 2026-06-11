@@ -1,0 +1,42 @@
+# WHAT: rejects any pod that doesn't set runAsNonRoot: true (at pod OR container level).
+# WHY:  a container running as root that escapes the runtime (via a kernel/runtime CVE)
+#       owns the host node. Running as a non-root UID is the single highest-leverage
+#       container hardening step — it turns many "root on the node" escapes into nothing.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-non-root
+  annotations:
+    policies.kyverno.io/title: Require runAsNonRoot
+    policies.kyverno.io/category: Pod Security Standards (Restricted)
+spec:
+  validationFailureAction: Audit
+  background: true
+  rules:
+    - name: require-run-as-non-root
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+      exclude:
+        any:
+          - resources:
+              namespaces:
+                - kube-system
+                - kube-public
+                - kube-node-lease
+                - kyverno
+                - argocd
+                - keda
+                - external-secrets
+                - monitoring
+      validate:
+        message: "runAsNonRoot must be true (set it on the pod or every container securityContext)."
+        anyPattern:
+          - spec:
+              securityContext:
+                runAsNonRoot: true
+          - spec:
+              containers:
+                - securityContext:
+                    runAsNonRoot: true

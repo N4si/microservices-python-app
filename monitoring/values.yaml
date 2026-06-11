@@ -1,0 +1,79 @@
+# kube-prometheus-stack Helm values for VidCast
+# Install: helm install monitoring prometheus-community/kube-prometheus-stack \
+#            -f monitoring/values.yaml -n monitoring --create-namespace
+
+grafana:
+  adminPassword: vidcast-demo
+  service:
+    type: NodePort
+    nodePort: 30007
+  persistence:
+    enabled: true
+    size: 2Gi
+  sidecar:
+    dashboards:
+      enabled: true
+      searchNamespace: monitoring
+  grafana.ini:
+    server:
+      root_url: "%(protocol)s://%(domain)s:30007"
+    # Allow the frontend Dashboard page to embed Grafana panels in an <iframe>
+    # (Grafana ships with allow_embedding=false + X-Frame-Options:deny, which the
+    # browser would otherwise block). Anonymous Viewer lets the iframe render the
+    # vidcast-ops dashboard without a login prompt — acceptable for this demo, where
+    # admin/vidcast-demo is already public.
+    security:
+      allow_embedding: true
+      cookie_samesite: none
+    auth.anonymous:
+      enabled: true
+      org_role: Viewer
+
+alertmanager:
+  service:
+    type: NodePort
+    nodePort: 30008
+  alertmanagerSpec:
+    storage:
+      volumeClaimTemplate:
+        spec:
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 2Gi
+
+prometheus:
+  prometheusSpec:
+    retention: 7d
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 10Gi
+    # EKS manages etcd, scheduler, controller-manager — disable scraping
+    kubeEtcd:
+      enabled: false
+    kubeScheduler:
+      enabled: false
+    kubeControllerManager:
+      enabled: false
+    # App scrape targets are defined as operator-native ServiceMonitor/PodMonitor
+    # resources under monitoring/scrape/ (B4), not as static configs here. The
+    # operator only adopts ones carrying `release: monitoring`, so keep that label.
+    # (The old static 'vidcast-gateway' job was replaced by gateway-servicemonitor.yaml.)
+
+# Disable components EKS manages internally
+kubeEtcd:
+  enabled: false
+kubeScheduler:
+  enabled: false
+kubeControllerManager:
+  enabled: false
+
+# Keep these enabled — node exporter and kube-state-metrics provide pod/node metrics
+nodeExporter:
+  enabled: true
+kubeStateMetrics:
+  enabled: true

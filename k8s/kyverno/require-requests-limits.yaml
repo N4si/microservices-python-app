@@ -1,0 +1,46 @@
+# WHAT: rejects any pod whose containers don't set BOTH cpu+memory requests AND
+#       cpu+memory limits.
+# WHY:  a container with no requests is invisible to the scheduler (it can land on an
+#       already-full node); a container with no limits can consume the whole node and
+#       starve everything else. On our single 2-vCPU node that's fatal — this is the
+#       policy backing all the node-budget tracking done across Sprint 2.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-requests-limits
+  annotations:
+    policies.kyverno.io/title: Require Requests and Limits
+    policies.kyverno.io/category: Best Practices
+spec:
+  validationFailureAction: Audit
+  background: true
+  rules:
+    - name: require-requests-limits
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+      exclude:
+        any:
+          - resources:
+              namespaces:
+                - kube-system
+                - kube-public
+                - kube-node-lease
+                - kyverno
+                - argocd
+                - keda
+                - external-secrets
+                - monitoring
+      validate:
+        message: "CPU and memory requests AND limits are required on every container."
+        pattern:
+          spec:
+            containers:
+              - resources:
+                  requests:
+                    cpu: "?*"
+                    memory: "?*"
+                  limits:
+                    cpu: "?*"
+                    memory: "?*"

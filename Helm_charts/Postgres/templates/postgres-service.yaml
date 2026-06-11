@@ -6,11 +6,12 @@ metadata:
     name: postgres-service
     app: auth-app
 spec:
-  type: NodePort
+  # I2: ClusterIP only. PostgreSQL is reached by the auth service in-cluster (and
+  # via `kubectl port-forward` for admin) — no external NodePort.
+  type: ClusterIP
   ports:
   - port: {{ .Values.service.port }}
     targetPort: {{ .Values.service.port }}
-    nodePort: {{ .Values.service.nodeport }}
   selector:
     name: postgres-pod
     app: auth-app

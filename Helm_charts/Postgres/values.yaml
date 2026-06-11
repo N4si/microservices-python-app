@@ -4,8 +4,59 @@ service:
   nodeport: 30003
 
 container:
-  image: postgres
+  # B2 gap-fix (disallow-latest-tag): pinned off the implicit :latest. 16.4-alpine
+  # chosen for a small, low-CVE base; it honours POSTGRES_HOST_AUTH_METHOD and the
+  # init.sql bootstrap unchanged. Runtime re-verify owed on next cluster apply.
+  image: postgres:16.4-alpine
   env:
-    user: nasi
-    password: cnd2023
+    user: pguser
+    # Injected by deploy.sh: --set container.env.password=$POSTGRES_PASSWORD.
+    # Never commit a real password here (CHANGEME is a no-real-secret placeholder).
+    password: CHANGEME
+    # scram-sha-256: passwords are actually enforced (H-2 fix). Requires POSTGRES_PASSWORD
+    # to be non-empty (which deploy.sh guarantees via --set). Changed from 'trust', which
+    # accepted any password — access was network-controlled but the credential was cosmetic.
+    authMethod: scram-sha-256
     db: authdb
+
+# A11 durability: back PGDATA with an EBS-backed PVC so registered users survive a
+# pod restart (without this, only the deploy.sh seed admin survives — everything in
+# the ephemeral pod filesystem is lost). Requires the aws-ebs-csi-driver addon
+# (terraform/modules/eks). Set persistence.enabled=false to fall back to the old
+# ephemeral behaviour (e.g. a local kind cluster with no EBS).
+persistence:
+  enabled: true
+  # Create the gp3 StorageClass from this chart. Set false if a suitable dynamic
+  # StorageClass already exists and you reference it via storageClassName below.
+  createStorageClass: true
+  storageClassName: vidcast-ebs-gp3
+  claimName: postgres-pvc
+  # Small: the auth_user table is tiny. gp3 can be expanded later (allowVolumeExpansion).
+  size: 2Gi
+
+# B2 gap-fix (require-requests-limits): right-sized for the demo workload — small
+# auth_user table, low query volume. Review under production load.
+resources:
+  requests:
+    cpu: "100m"
+    memory: "128Mi"
+  limits:
+    cpu: "250m"
+    memory: "256Mi"
+
+# B2 gap-fix (require-labels): `app: auth-app` already exists on the pod template;
+# these add the two remaining Kyverno-required labels.
+labels:
+  environment: prod
+  managedBy: helm
+
+# B2 gap-fix (require-seccomp). NOTE: the official postgres image's entrypoint
+# runs as root to initdb and chown $PGDATA, then drops to the `postgres` user via
+# gosu — it CANNOT start with runAsNonRoot: true. That remains a DOCUMENTED
+# require-non-root Audit exception (needs a Kyverno exclude rule before Enforce).
+# Safe subset applied: seccomp RuntimeDefault + no privilege escalation.
+podSecurityContext:
+  seccompProfile:
+    type: RuntimeDefault
+containerSecurityContext:
+  allowPrivilegeEscalation: false

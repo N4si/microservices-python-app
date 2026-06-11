@@ -1,0 +1,66 @@
+# WHAT: rejects privileged containers and containers that add dangerous Linux
+#       capabilities (SYS_ADMIN, NET_ADMIN, ALL).
+# WHY:  a privileged container effectively disables all container isolation — it can
+#       access host devices and the kernel directly, making "container escape" trivial.
+#       SYS_ADMIN/NET_ADMIN/ALL grant near-root kernel powers for the same reason. No
+#       VidCast workload needs any of these.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: disallow-privileged
+  annotations:
+    policies.kyverno.io/title: Disallow Privileged and Dangerous Capabilities
+    policies.kyverno.io/category: Pod Security Standards (Baseline)
+spec:
+  validationFailureAction: Audit
+  background: true
+  rules:
+    - name: disallow-privileged-mode
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+      exclude:
+        any:
+          - resources:
+              namespaces: &platformNs
+                - kube-system
+                - kube-public
+                - kube-node-lease
+                - kyverno
+                - argocd
+                - keda
+                - external-secrets
+                - monitoring
+      validate:
+        message: "Privileged mode is not allowed."
+        pattern:
+          spec:
+            =(initContainers):
+              - =(securityContext):
+                  =(privileged): "false"
+            containers:
+              - =(securityContext):
+                  =(privileged): "false"
+    - name: disallow-dangerous-capabilities
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+      exclude:
+        any:
+          - resources:
+              namespaces: *platformNs
+      validate:
+        message: "Adding SYS_ADMIN, NET_ADMIN, or ALL capabilities is not allowed."
+        foreach:
+          - list: "request.object.spec.containers"
+            deny:
+              conditions:
+                any:
+                  - key: "{{ element.securityContext.capabilities.add[] || `[]` }}"
+                    operator: AnyIn
+                    value:
+                      - SYS_ADMIN
+                      - NET_ADMIN
+                      - ALL

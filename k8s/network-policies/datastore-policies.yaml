@@ -1,0 +1,131 @@
+# A6 — datastore INGRESS allow rules. Each datastore accepts connections only from
+# the specific in-cluster clients that need it. Note what is deliberately ABSENT:
+# no allow-from-anywhere on the DB/broker ports, so once default-deny is in place
+# the stateful NodePorts (30003/30004/30005) are no longer reachable from outside
+# the cluster — which also closes finding H-1 (0.0.0.0/0 open to stateful ports).
+# Admin access is via `kubectl port-forward` instead.
+#
+# Datastores need no egress policy (they don't initiate connections); DNS for them
+# is covered by allow-dns.yaml.
+---
+# MongoDB (app: database) — from gateway (GridFS + outbox), converter (read video /
+# write mp3), outbox-relay (read outbox).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: mongodb-ingress
+  namespace: default
+spec:
+  podSelector:
+    matchLabels:
+      app: database
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: gateway
+        - podSelector:
+            matchLabels:
+              app: converter
+        - podSelector:
+            matchLabels:
+              app: outbox-relay
+      ports:
+        - protocol: TCP
+          port: 27017
+---
+# PostgreSQL (app: auth-app) — from auth only.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: postgres-ingress
+  namespace: default
+spec:
+  podSelector:
+    matchLabels:
+      app: auth-app
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: auth
+      ports:
+        - protocol: TCP
+          port: 5432
+---
+# RabbitMQ (app: rabbitmq) — AMQP 5672 from the four in-cluster clients, plus the
+# KEDA scaler in the `keda` namespace (it polls queue depth over AMQP). Management
+# 15672 is intentionally NOT exposed externally (port-forward for admin).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: rabbitmq-ingress
+  namespace: default
+spec:
+  podSelector:
+    matchLabels:
+      app: rabbitmq
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: gateway
+        - podSelector:
+            matchLabels:
+              app: outbox-relay
+        - podSelector:
+            matchLabels:
+              app: converter
+        - podSelector:
+            matchLabels:
+              app: notification
+      ports:
+        - protocol: TCP
+          port: 5672
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: keda
+      ports:
+        - protocol: TCP
+          port: 5672
+    # Prometheus (monitoring ns) scrapes the rabbitmq_prometheus plugin on :15692
+    # (/metrics/per-object). Without this, default-deny drops the scrape and the
+    # rabbitmq target goes DOWN (the two RabbitMQ alerts depend on it).
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - protocol: TCP
+          port: 15692
+---
+# Redis (app: redis, A2) — from the two consumers that claim_once.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: redis-ingress
+  namespace: default
+spec:
+  podSelector:
+    matchLabels:
+      app: redis
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: converter
+        - podSelector:
+            matchLabels:
+              app: notification
+      ports:
+        - protocol: TCP
+          port: 6379

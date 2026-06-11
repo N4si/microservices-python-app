@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: converter-configmap
+data:
+  MP3_QUEUE: "mp3"
+  VIDEO_QUEUE: "video"
+  # A3 retry/DLQ tuning. After MAX_RETRIES failed attempts a message goes to the
+  # terminal <queue>.dlq; RETRY_TTL_MS is the delay (ms) a failed message waits in
+  # <queue>.retry before it is re-injected into the main queue.
+  MAX_RETRIES: "3"
+  RETRY_TTL_MS: "30000"
+  # A2 idempotency. "false" (default) = consumers behave exactly as before. "true"
+  # = claim-once on video_fid via Redis so a redelivery isn't converted twice.
+  # IDEMPOTENCY_TTL_SECONDS bounds the dedup window; REDIS_HOST is the in-cluster
+  # Redis Service.
+  IDEMPOTENCY_ENABLED: "false"
+  IDEMPOTENCY_TTL_SECONDS: "300"
+  REDIS_HOST: "redis"
+  # MONGODB_URI moved to the converter-secret Secret — it embeds the MongoDB
+  # username/password and must not live in a ConfigMap. The env var name is
+  # unchanged; envFrom pulls it from the Secret instead.

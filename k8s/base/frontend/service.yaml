@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+  labels:
+    app: frontend
+spec:
+  # P1/I2: ClusterIP only. The ALB Ingress (target-type: ip) registers the frontend
+  # pod IPs directly, so no NodePort is needed; the platform is reached at
+  # https://<hostname> via the ALB instead of http://<node-ip>:30006.
+  type: ClusterIP
+  selector:
+    app: frontend
+  ports:
+    - port: 8080
+      targetPort: 8080
+      protocol: TCP

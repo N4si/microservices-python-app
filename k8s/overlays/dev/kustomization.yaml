@@ -1,0 +1,68 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# DEV overlay — lighter footprint for a smaller / cost-saving cluster and faster
+# Argo syncs. All backends drop to 1 replica (the converter/notification HA of
+# prod is unnecessary for dev validation, and it leaves CPU headroom on a
+# 2-vCPU node for the in-cluster add-ons added later: KEDA, Kyverno, Kubecost).
+#
+# Argo CD (B1) points its auto-sync-ON "vidcast-dev" Application here.
+namespace: default
+
+resources:
+  - ../../base/auth
+  - ../../base/gateway
+  - ../../base/converter
+  - ../../base/notification
+  - ../../base/frontend
+  # A1 outbox relay. Single replica — deliberately NOT in the replicas: list
+  # below, it must stay at 1 (single publisher). The johnbaabalola/outbox-relay
+  # image is built by CI (John's matrix change); once pushed, add it to the
+  # images: list with its tag like the other services.
+  - ../../base/outbox-relay
+  # A2 idempotency claim store (in-cluster Redis, single replica). Not in the
+  # replicas: list — Redis stays at 1.
+  - ../../base/redis
+  # I4/P5 nightly mongodump + pg_dump CronJobs → S3 backup bucket. CronJob pods
+  # are short-lived and carry no replica count.
+  - ../../base/backup
+
+labels:
+  - pairs:
+      environment: dev
+      cost-centre: vidcast-portfolio
+      owner: john-baabalola
+      app.kubernetes.io/managed-by: kustomize
+    includeSelectors: false
+    includeTemplates: true
+
+images:
+  - name: johnbaabalola/auth-service
+    newTag: 65f2f57
+  - name: johnbaabalola/gateway-service
+    newTag: 65f2f57
+  - name: johnbaabalola/converter-service
+    newTag: 65f2f57
+  - name: johnbaabalola/notification-service
+    newTag: 65f2f57
+  # B2 gap-fix (disallow-latest-tag): pin the relay off :latest. 65f2f57 is the
+  # tag actually built and pushed to the registry (the prior placeholder e4d2669
+  # was never built → ImagePullBackOff when Argo synced it). The REAL tag will be
+  # bumped here by GitOps (B1) once John adds outbox-relay to the CI build matrix
+  # (A1 CI diff) like the other services.
+  - name: johnbaabalola/outbox-relay
+    newTag: 65f2f57
+  - name: vidcast-frontend
+    newName: 501562869470.dkr.ecr.eu-west-2.amazonaws.com/vidcast-frontend
+    newTag: 6eb217c
+
+# Dev runs one replica of each backend (frontend is already 1 in base).
+replicas:
+  - name: auth
+    count: 1
+  - name: gateway
+    count: 1
+  - name: converter
+    count: 1
+  - name: notification
+    count: 1

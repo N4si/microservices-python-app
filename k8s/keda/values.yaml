@@ -1,0 +1,29 @@
+# Helm values for the KEDA install (A7).
+#   helm repo add kedacore https://kedacore.github.io/charts
+#   helm install keda kedacore/keda -n keda --create-namespace -f k8s/keda/values.yaml
+#
+# Conservative resources for the 2-vCPU node: KEDA runs three pods (operator,
+# metrics API server, admission webhook). Total requests ≈ 125m / 160Mi — kept
+# small because the node already carries the app + datastores + Redis + relay.
+resources:
+  operator:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 100m
+      memory: 128Mi
+  metricServer:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 100m
+      memory: 128Mi
+  webhooks:
+    requests:
+      cpu: 25m
+      memory: 32Mi
+    limits:
+      cpu: 50m
+      memory: 64Mi

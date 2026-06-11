@@ -1,0 +1,63 @@
+# Kubecost (B3 — FinOps), OSS / OpenCost core. NO license key.
+#   helm repo add kubecost https://kubecost.github.io/cost-analyzer/
+#   helm install kubecost kubecost/cost-analyzer -n kubecost --create-namespace \
+#     -f k8s/kubecost/values.yaml
+#
+# ┌─ THE node-budget tuning (the whole reason this fits a 2-vCPU node) ─────────┐
+# │ By DEFAULT Kubecost stands up its OWN Prometheus + node-exporter +          │
+# │ kube-state-metrics — heavy, and a duplicate of the kube-prometheus-stack we │
+# │ already run (B4). We DISABLE all of that and point Kubecost at the existing │
+# │ Prometheus in the `monitoring` namespace. That turns Kubecost from a ~1 CPU │
+# │ add-on into a single ~175m cost-analyzer pod.                               │
+# └─────────────────────────────────────────────────────────────────────────────┘
+global:
+  prometheus:
+    enabled: false   # do NOT deploy a second Prometheus
+    fqdn: http://monitoring-kube-prometheus-prometheus.monitoring.svc.cluster.local:9090
+  grafana:
+    enabled: false   # we already have Grafana (B4); the FinOps dashboard loads there
+    proxy: false
+
+# Belt-and-braces: ensure none of the bundled exporters deploy.
+prometheus:
+  nodeExporter:
+    enabled: false
+  kube-state-metrics:
+    disabled: true
+  server:
+    # unused (global.prometheus.enabled=false), but pinned small if ever toggled
+    resources:
+      requests: {cpu: 10m, memory: 32Mi}
+
+# OSS / OpenCost core — no productKey, no enterprise features.
+kubecostProductConfigs:
+  clusterName: vidcast-cluster
+
+# Disable the heavyweight optional subsystems we don't need on one node.
+networkCosts:
+  enabled: false        # eBPF per-pod network cost agent (a DaemonSet) — off
+clusterController:
+  enabled: false
+forecasting:
+  enabled: false
+kubecostAggregator:
+  enabled: false
+
+# ~175m / 224Mi total (model + frontend). Defaults are far higher (model alone
+# defaults ~500m/512Mi). Tuned down for the single 2-vCPU node — see the B3 review
+# note: even at this size Kubecost pushes the PROD footprint over the 90% idle gate,
+# so it is intended to run against the dev (1-replica) footprint or be scaled to 0
+# between cost-analysis sessions (Prometheus 7d retention backfills history).
+kubecostModel:
+  resources:
+    requests: {cpu: "150m", memory: "192Mi"}
+    limits:   {cpu: "300m", memory: "384Mi"}
+kubecostFrontend:
+  resources:
+    requests: {cpu: "25m", memory: "32Mi"}
+    limits:   {cpu: "50m", memory: "64Mi"}
+
+# Small PV for Kubecost's local ETL cache (cost history beyond Prometheus retention).
+persistentVolume:
+  enabled: true
+  size: 2Gi

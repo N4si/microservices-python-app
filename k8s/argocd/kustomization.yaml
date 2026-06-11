@@ -1,0 +1,12 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# B1 Argo CD Application CRDs. Applied SEPARATELY (after `helm install argocd`)
+# because they are argoproj.io CRDs that must exist first — same applied-separately
+# pattern as ESO (A9) and KEDA (A7). Argo CD itself, KEDA, ESO, NetworkPolicies and
+# Kyverno are PLATFORM resources owned by the platform engineer (John), NOT managed
+# by these Applications — the Applications only manage the app workloads under
+# k8s/overlays/{dev,prod}. See GITOPS.md for the manage-vs-manual boundary.
+resources:
+  - application-dev.yaml
+  - application-prod.yaml

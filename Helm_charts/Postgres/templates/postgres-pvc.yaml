@@ -1,0 +1,20 @@
+{{- if .Values.persistence.enabled }}
+# PersistentVolumeClaim for Postgres data. Without this, PGDATA lives in the
+# pod's ephemeral filesystem and every registered user (except the deploy.sh seed
+# admin) is lost on the first pod restart. ReadWriteOnce is correct for a
+# single-replica datastore — exactly one pod mounts it at a time.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .Values.persistence.claimName }}
+  labels:
+    app: auth-app
+    app.kubernetes.io/part-of: vidcast
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: {{ .Values.persistence.storageClassName }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.size }}
+{{- end }}

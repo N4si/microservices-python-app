@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: gateway
+  labels:
+    # B4: the ServiceMonitor selects the Service by this label.
+    app: gateway
+spec:
+  selector:
+    app: gateway
+  # I2/P1: ClusterIP only. The gateway is no longer publicly exposed on a NodePort;
+  # browsers and API clients reach it through the frontend (nginx proxies /api/ →
+  # gateway), which the ALB Ingress fronts. Smaller attack surface.
+  type: ClusterIP
+  ports:
+    # named so the B4 ServiceMonitor can reference it by name for /metrics scraping.
+    - name: http
+      port: 8080
+      targetPort: 8080
+      protocol: TCP

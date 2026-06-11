@@ -1,0 +1,16 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# B2 Kyverno ClusterPolicies. Applied SEPARATELY (after `helm install kyverno`)
+# because these are kyverno.io CRDs — same applied-separately, platform-owned
+# pattern as ESO/KEDA/Argo. ALL policies are validationFailureAction: Audit in
+# Sprint 3 — nothing is enforced/blocked yet. See README.md for the Audit→Enforce
+# promotion procedure (a deliberate, separate follow-up after the gap is fixed).
+resources:
+  - disallow-latest-tag.yaml
+  - require-requests-limits.yaml
+  - require-non-root.yaml
+  - require-seccomp.yaml
+  - require-labels.yaml
+  - disallow-privileged.yaml
+  - verify-images.yaml

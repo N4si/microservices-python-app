@@ -1,0 +1,84 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  labels:
+    app: redis
+spec:
+  # Single replica. The idempotency claim store is intentionally non-HA: claims
+  # are short-lived (TTL) and claim_once fails OPEN, so a Redis restart degrades
+  # to "possible occasional duplicate", never a stuck pipeline (risk 2.7). The
+  # managed/HA alternative (ElastiCache) is documented-but-skipped in
+  # MANAGED_SERVICES.md §5 per the cost boundary.
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
+        # B2 gap-fix: pod-level so it also covers any future init/sidecar
+        # containers. RuntimeDefault blocks ~44 dangerous syscalls (PSS Restricted)
+        # and satisfies the Kyverno require-seccomp-runtime-default policy.
+        seccompProfile:
+          type: RuntimeDefault
+      volumes:
+        # In-memory only — no persistence. /data is mounted writable because
+        # redis chdirs there; with --save "" --appendonly no nothing is written.
+        - name: data
+          emptyDir: {}
+      containers:
+        - name: redis
+          image: redis:7.4-alpine
+          imagePullPolicy: IfNotPresent
+          # No persistence (RDB snapshots off, AOF off) — this is an ephemeral
+          # dedup cache, not a database. maxmemory-policy evicts oldest claims if
+          # memory is ever pressured rather than OOM-killing the pod.
+          args:
+            - "redis-server"
+            - "--save"
+            - ""
+            - "--appendonly"
+            - "no"
+            - "--maxmemory"
+            - "100mb"
+            - "--maxmemory-policy"
+            - "allkeys-lru"
+          ports:
+            - containerPort: 6379
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "128Mi"
+            limits:
+              cpu: "100m"
+              memory: "256Mi"
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          livenessProbe:
+            tcpSocket:
+              port: 6379
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            exec:
+              command: ["redis-cli", "ping"]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 3

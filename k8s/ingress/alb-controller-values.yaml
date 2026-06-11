@@ -1,0 +1,37 @@
+# Helm values for the AWS Load Balancer Controller (eks/aws-load-balancer-controller).
+# Install into kube-system. The controller watches Ingress resources with
+# ingressClassName: alb and provisions/manages the ALB.
+#
+# PLACEHOLDERS filled at deploy time (do NOT commit real values):
+#   ${LBC_IRSA_ROLE_ARN} — terraform output lbc_irsa_role_arn (module.lbc)
+#   ${VPC_ID}            — terraform output vpc_id
+#
+# Install (see docs/INGRESS_DEPLOY.md):
+#   helm repo add eks https://aws.github.io/eks-charts
+#   helm install aws-load-balancer-controller eks/aws-load-balancer-controller \
+#     -n kube-system -f k8s/ingress/alb-controller-values.yaml \
+#     --set serviceAccount.annotations."eks\.amazonaws\.com/role-arn"=$LBC_IRSA_ROLE_ARN \
+#     --set vpcId=$VPC_ID
+clusterName: vidcast-cluster
+region: eu-west-2
+vpcId: "${VPC_ID}"
+
+serviceAccount:
+  # Create the SA named exactly as the IRSA trust policy expects
+  # (system:serviceaccount:kube-system:aws-load-balancer-controller).
+  create: true
+  name: aws-load-balancer-controller
+  annotations:
+    eks.amazonaws.com/role-arn: "${LBC_IRSA_ROLE_ARN}"
+
+# Single replica is fine at this scale (the controller is control-plane only; an
+# ALB it already created keeps serving traffic during a brief controller restart).
+replicaCount: 1
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 200m
+    memory: 128Mi

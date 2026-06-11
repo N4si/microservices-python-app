@@ -1,0 +1,18 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Base manifests for the gateway-service (Flask + PyMongo + Pika, NodePort
+# :30002). Fronts login/upload/download/admin. References gateway-secret +
+# rabbitmq-secret (the latter is created by the RabbitMQ Helm chart).
+resources:
+  - deployment.yaml
+  - service.yaml
+  - configmap.yaml
+
+labels:
+  - pairs:
+      app.kubernetes.io/name: gateway
+      app.kubernetes.io/component: gateway-service
+      app.kubernetes.io/part-of: vidcast
+    includeSelectors: false
+    includeTemplates: true

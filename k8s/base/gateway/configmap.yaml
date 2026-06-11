@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gateway-configmap
+data:
+  AUTH_SVC_ADDRESS: "auth:5000"
+  # A1 transactional outbox feature flag. "false" (default) = the gateway
+  # publishes uploads directly to RabbitMQ exactly as before. Flip to "true" to
+  # route uploads through the MongoDB outbox collection (the outbox-relay then
+  # publishes them). Flip only after the relay image is deployed and verified.
+  OUTBOX_ENABLED: "false"
+  # MONGODB_VIDEOS_URI and MONGODB_MP3S_URI moved to the gateway-secret Secret —
+  # they embed the MongoDB username/password and must not live in a ConfigMap
+  # (ConfigMaps are not treated as sensitive and are easy to dump). The env var
+  # names are unchanged; envFrom pulls them from the Secret instead. See
+  # k8s/base/gateway/ (Secret provided out of band / via ESO after A9).

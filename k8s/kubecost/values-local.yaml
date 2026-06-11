@@ -1,0 +1,19 @@
+# Local override for this dev cluster, applied after values.yaml:
+#   helm install kubecost kubecost/cost-analyzer -n kubecost \
+#     -f k8s/kubecost/values.yaml -f k8s/kubecost/values-local.yaml
+#
+# 1) clusterId: the current cost-analyzer chart bundles a finopsagent subchart that
+#    hard-requires global.clusterId. We don't use the cloud agent, so disable it and
+#    set a clusterId for completeness.
+# 2) persistentVolume disabled: this cluster has no dynamic EBS provisioner
+#    (no aws-ebs-csi-driver; in-tree provisioner dead on EKS 1.31). A PVC would hang
+#    Pending. Kubecost falls back to an emptyDir ETL cache; cost history beyond the
+#    pod lifetime is still backfilled from the 7d Prometheus retention.
+global:
+  clusterId: vidcast-cluster
+
+finopsagent:
+  enabled: false
+
+persistentVolume:
+  enabled: false

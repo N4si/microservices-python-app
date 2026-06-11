@@ -1,0 +1,20 @@
+# Local override: ephemeral (emptyDir) storage for the monitoring stack.
+# Used because this dev cluster has NO dynamic EBS provisioner (no aws-ebs-csi-driver
+# addon; the in-tree kubernetes.io/aws-ebs provisioner is non-functional on EKS 1.31),
+# and the datastores run on manually-provisioned local PVs only. emptyDir avoids
+# billable EBS volumes and orphaned-volume cost on teardown (project "~$0 when off"
+# posture). Trade-off: metrics/dashboards do not survive a pod restart — acceptable
+# on a transient dev/demo cluster. Apply alongside values.yaml:
+#   helm install monitoring prometheus-community/kube-prometheus-stack \
+#     -f monitoring/values.yaml -f monitoring/values-emptydir.yaml -n monitoring
+grafana:
+  persistence:
+    enabled: false
+
+alertmanager:
+  alertmanagerSpec:
+    storage: null
+
+prometheus:
+  prometheusSpec:
+    storageSpec: null

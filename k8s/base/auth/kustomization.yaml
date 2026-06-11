@@ -1,0 +1,24 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Base manifests for the auth-service (Flask + PostgreSQL, ClusterIP :5000).
+# Environment-agnostic: overlays set the image tag, replica count, and the
+# org labels (environment / cost-centre / owner). The auth-secret and the
+# auth-configmap are referenced via envFrom; the Secret is provided out of band
+# (gitignored secret.yaml today, ExternalSecret after A9).
+resources:
+  - deployment.yaml
+  - service.yaml
+  - configmap.yaml
+
+# Identity labels. includeSelectors:false is critical — a Deployment's
+# spec.selector is immutable, so we must never let a label transformer touch it.
+# includeTemplates:true puts the labels on the pods too (handy for Kyverno
+# require-labels in B2 and for `kubectl get pods -l app.kubernetes.io/part-of`).
+labels:
+  - pairs:
+      app.kubernetes.io/name: auth
+      app.kubernetes.io/component: auth-service
+      app.kubernetes.io/part-of: vidcast
+    includeSelectors: false
+    includeTemplates: true

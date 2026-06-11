@@ -1,0 +1,9 @@
+# The outbox-relay imports only pika (RabbitMQ) and pymongo (Mongo) plus the
+# stdlib (json, os, time, datetime, pathlib). Floors match the gateway/converter
+# pins so the relay resolves the same patched transitive deps.
+pika>=1.3.1
+pymongo>=4.3.3
+certifi>=2023.7.22
+# urllib3 must be >=2.6.0: the latest 1.26.x (1.26.20) still carries 4 fixable
+# HIGH CVEs (e.g. CVE-2025-66418) that are only patched in the 2.x line.
+urllib3>=2.6.0

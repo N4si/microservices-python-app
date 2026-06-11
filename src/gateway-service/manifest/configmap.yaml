@@ -1,9 +1,0 @@
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: gateway-configmap
-data:
-  AUTH_SVC_ADDRESS: "auth:5000"
-  MONGODB_VIDEOS_URI: "mongodb://nasi:nasi1234@mongodb:27017/videos?authSource=admin"
-  MONGODB_MP3S_URI: "mongodb://nasi:nasi1234@mongodb:27017/mp3s?authSource=admin"
-

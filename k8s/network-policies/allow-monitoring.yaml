@@ -1,0 +1,55 @@
+# A6 — allow Prometheus (kube-prometheus-stack, `monitoring` namespace) to scrape
+# the app pods' metrics ports, so default-deny doesn't silently break monitoring.
+# Gateway already accepts 8080 from any source, but it's listed here explicitly so
+# the scrape intent is documented and survives a tightening of the gateway rule.
+# B4 added /metrics to gateway (:8080) AND a dedicated :9000 metrics port on the
+# converter and notification consumers — both are scraped by PodMonitors, so the
+# monitoring namespace also needs ingress to :9000 on those pods (below).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-monitoring-scrape
+  namespace: default
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app
+        operator: In
+        values: ["gateway", "auth"]
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - protocol: TCP
+          port: 8080
+        - protocol: TCP
+          port: 5000
+---
+# Consumers (converter, notification) expose a Prometheus endpoint on :9000 (B4),
+# scraped by their PodMonitors. They have no other ingress, so without this the
+# default-deny silently drops the scrape and their targets go DOWN.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-monitoring-scrape-consumers
+  namespace: default
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app
+        operator: In
+        values: ["converter", "notification"]
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - protocol: TCP
+          port: 9000

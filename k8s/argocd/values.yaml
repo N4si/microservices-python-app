@@ -1,0 +1,56 @@
+# Helm values for Argo CD (B1) — tuned for a single 2-vCPU demo node, NOT the
+# chart defaults (which assume a dedicated control-plane cluster).
+#   helm repo add argo https://argoproj.github.io/argo-helm
+#   helm install argocd argo/argo-cd -n argocd --create-namespace -f k8s/argocd/values.yaml
+#
+# Lean: SSO (dex), ApplicationSet, and notifications are disabled — none are needed
+# for two hand-written Applications on one cluster. That leaves the core four:
+# application-controller, server, repo-server, and the bundled redis. Total
+# requests ≈ 250m / 576Mi.
+
+dex:
+  enabled: false
+notifications:
+  enabled: false
+applicationSet:
+  enabled: false
+
+# The reconcile engine — the heaviest component; give it the most headroom.
+controller:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 250m
+      memory: 512Mi
+
+# API + UI. Kept ClusterIP (default) — the Argo UI is an admin control plane and is
+# NOT world-exposed via NodePort (same posture as not exposing the RabbitMQ/DB admin
+# ports in A6). Access is via `kubectl -n argocd port-forward svc/argocd-server 8080:443`.
+server:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 100m
+      memory: 256Mi
+
+repoServer:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 100m
+      memory: 256Mi
+
+redis:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 100m
+      memory: 128Mi

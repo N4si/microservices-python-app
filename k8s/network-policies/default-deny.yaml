@@ -1,0 +1,19 @@
+# A6 — default-deny for the `default` namespace. APPLY THIS LAST (after all the
+# allow-* policies below exist), so nothing is cut off before its exceptions are in
+# place. NetworkPolicies are additive (a packet is permitted if ANY policy allows
+# it), so once this is in effect every pod denies all ingress AND egress except
+# what the allow-* policies explicitly permit.
+#
+# Rollback (fastest in the whole plan): `kubectl delete networkpolicy default-deny-all -n default`
+# instantly restores open networking.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: default
+spec:
+  podSelector: {} # every pod in the namespace
+  policyTypes:
+    - Ingress
+    - Egress
+  # No ingress/egress rules => deny everything not explicitly allowed elsewhere.

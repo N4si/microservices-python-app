@@ -1,0 +1,59 @@
+# Public entrypoint for VidCast via an AWS ALB (provisioned by the AWS
+# Load Balancer Controller from this Ingress).
+#
+# ROUTING DECISION (important): a single rule sends ALL paths to the `frontend`
+# service. The frontend's nginx already serves the React SPA AND proxies `/api/` →
+# gateway:8080 *stripping the /api prefix* (src/frontend/nginx.conf). An ALB cannot
+# rewrite/strip path prefixes, so routing `/api` straight to the gateway would
+# deliver `/api/login` to a gateway that only knows `/login` → 404. Going through
+# the frontend preserves the working request path for browsers AND API clients
+# (https://<host>/api/login) and keeps the gateway internal (ClusterIP, reachable
+# only via the frontend) — a smaller attack surface.
+#
+# TLS DECISION: the ALB terminates TLS using an ACM certificate (certificate-arn
+# below). The ALB does NOT consume cert-manager's in-cluster TLS secrets, so the
+# cert-manager ClusterIssuer (k8s/ingress/cert-manager/) is included only as the
+# alternative path (in-cluster ingress, or DNS-01 issuance you then import to ACM).
+# See docs/INGRESS_DEPLOY.md.
+#
+# PLACEHOLDERS filled at deploy time from DEPLOYMENT_CONFIG.md / terraform outputs:
+#   ${VIDCAST_HOSTNAME}     — the public DNS name (Route 53 → ALB)
+#   ${ACM_CERTIFICATE_ARN}  — ACM cert ARN covering ${VIDCAST_HOSTNAME}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: vidcast-ingress
+  namespace: default
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    # target-type: ip registers pod IPs directly (works with ClusterIP services).
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80,"HTTPS":443}]'
+    # Redirect all HTTP to HTTPS at the ALB.
+    alb.ingress.kubernetes.io/ssl-redirect: "443"
+    alb.ingress.kubernetes.io/certificate-arn: "${ACM_CERTIFICATE_ARN}"
+    # Health check the SPA root.
+    alb.ingress.kubernetes.io/healthcheck-path: /
+    # Named ALB group so additional Ingresses (e.g. a future grafana host) can share
+    # this one ALB instead of each provisioning their own.
+    alb.ingress.kubernetes.io/group.name: vidcast
+  # The LBC chart creates the `alb` IngressClass (createIngressClassResource=true).
+spec:
+  ingressClassName: alb
+  tls:
+    - hosts:
+        - "${VIDCAST_HOSTNAME}"
+      # Not used by the ALB (it terminates with ACM) but documents the host→cert
+      # intent and is harmless.
+      secretName: vidcast-tls
+  rules:
+    - host: "${VIDCAST_HOSTNAME}"
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: 8080

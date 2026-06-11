@@ -1,0 +1,29 @@
+# B4 (M-2): scrape rabbitmq_prometheus (:15692). Un-dangles the two RabbitMQ alerts
+# in vidcast-alerts.yaml (rabbitmq_queue_messages, up{job="rabbitmq"}).
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: vidcast-rabbitmq
+  namespace: monitoring
+  labels:
+    release: monitoring
+spec:
+  namespaceSelector:
+    matchNames: ["default"]
+  selector:
+    matchLabels:
+      app: rabbitmq
+  endpoints:
+    # /metrics/per-object (NOT the default /metrics): the default endpoint returns
+    # cluster-AGGREGATED metrics only. The existing RabbitMQQueueBacklog alert needs
+    # PER-QUEUE rabbitmq_queue_messages{queue="video"}, which is exposed per-object.
+    # Cardinality is trivial here (2 queues + DLQ topology). RabbitMQ ≥3.8.
+    - port: prometheus    # the named Service port (15692)
+      path: /metrics/per-object
+      interval: 30s
+      # Force job="rabbitmq" so the existing alerts' up{job="rabbitmq"} selector
+      # resolves deterministically (the operator's default job label is otherwise
+      # derived from the Service/port and is version-dependent).
+      relabelings:
+        - targetLabel: job
+          replacement: rabbitmq

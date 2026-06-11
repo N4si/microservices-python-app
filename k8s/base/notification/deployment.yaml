@@ -1,0 +1,76 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notification
+  labels:
+    app: notification
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: notification
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 8
+  template:
+    metadata:
+      labels:
+        app: notification
+    spec:
+      # Disable legacy Docker-link service env vars. The `redis` Service otherwise
+      # injects REDIS_PORT=tcp://<ip>:6379, clobbering the plain "6379" idempotency.py
+      # expects → ValueError at import. This consumer needs no service-link vars.
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        # B2 gap-fix: pod-level so it also covers any future init/sidecar
+        # containers. RuntimeDefault blocks ~44 dangerous syscalls (PSS Restricted)
+        # and satisfies the Kyverno require-seccomp-runtime-default policy.
+        seccompProfile:
+          type: RuntimeDefault
+      volumes:
+        - name: tmp-volume
+          emptyDir: {}
+      containers:
+        - name: notification
+          image: johnbaabalola/notification-service:16f49a0
+          imagePullPolicy: IfNotPresent
+          ports:
+            # B4: prometheus metrics (start_http_server) — scraped by a PodMonitor.
+            - name: metrics
+              containerPort: 9000
+          envFrom:
+            - configMapRef:
+                name: notification-configmap
+            - secretRef:
+                name: notification-secret
+            - secretRef:
+                name: rabbitmq-secret
+          env:
+            # Unbuffered stdout so print() diagnostics reach kubectl logs
+            # immediately, not on a block-buffer flush.
+            - name: PYTHONUNBUFFERED
+              value: "1"
+          volumeMounts:
+            - name: tmp-volume
+              mountPath: /tmp
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "100m"
+              memory: "128Mi"
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          livenessProbe:
+            exec:
+              command: ["test", "-f", "/tmp/healthy"]
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            failureThreshold: 3

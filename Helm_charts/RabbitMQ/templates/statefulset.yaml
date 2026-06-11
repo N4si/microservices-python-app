@@ -11,10 +11,18 @@ spec:
     metadata:
       labels:
         app: rabbitmq
+        environment: {{ .Values.labels.environment }}
+        app.kubernetes.io/managed-by: {{ .Values.labels.managedBy }}
     spec:
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
         - name: rabbitmq
           image: rabbitmq:3-management
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
           ports:
             - name: http
               protocol: TCP
@@ -22,6 +30,10 @@ spec:
             - name: amqp
               protocol: TCP
               containerPort: 5672
+            # B4: rabbitmq_prometheus metrics endpoint (scraped by a ServiceMonitor).
+            - name: prometheus
+              protocol: TCP
+              containerPort: 15692
           envFrom:
             - configMapRef:
                 name: rabbitmq-configmap
@@ -30,7 +42,16 @@ spec:
           volumeMounts:
             - mountPath: /var/lib/rabbitmq
               name: rabbitmq-volume
+            # B4: override enabled_plugins to add rabbitmq_prometheus (subPath mounts
+            # just this one file, leaving the rest of /etc/rabbitmq untouched).
+            - mountPath: /etc/rabbitmq/enabled_plugins
+              subPath: enabled_plugins
+              name: enabled-plugins
+              readOnly: true
       volumes:
         - name: rabbitmq-volume
           persistentVolumeClaim:
             claimName: rabbitmq-pvc
+        - name: enabled-plugins
+          configMap:
+            name: rabbitmq-enabled-plugins

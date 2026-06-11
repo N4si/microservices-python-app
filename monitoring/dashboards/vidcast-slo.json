@@ -1,0 +1,146 @@
+{
+  "title": "VidCast SLO / Error Budget",
+  "uid": "vidcast-slo",
+  "tags": ["vidcast", "slo"],
+  "timezone": "browser",
+  "refresh": "30s",
+  "schemaVersion": 36,
+  "panels": [
+    {
+      "id": 100,
+      "type": "text",
+      "title": "",
+      "gridPos": {"h": 3, "w": 24, "x": 0, "y": 0},
+      "options": {
+        "mode": "markdown",
+        "content": "## VidCast SLOs — error budget & burn rate\n**Demonstrative targets on a single-node demo cluster** (every teardown exhausts the availability budget — see SLO.md). Burn rate is normalised: **1× = sustainable**, **14× = fast-burn page**. Budget-remaining is computed over the **7-day Prometheus retention**, not the full 30-day SLO window."
+      }
+    },
+
+    {
+      "id": 1,
+      "title": "Availability — budget remaining (7d)",
+      "type": "stat",
+      "gridPos": {"h": 6, "w": 6, "x": 0, "y": 3},
+      "fieldConfig": {"defaults": {"unit": "percent", "min": 0, "max": 100,
+        "thresholds": {"steps": [{"color": "red", "value": null}, {"color": "yellow", "value": 25}, {"color": "green", "value": 50}]}}},
+      "options": {"colorMode": "background", "reduceOptions": {"calcs": ["last"]}},
+      "targets": [{"expr": "100 * (1 - clamp_max((sum(increase(vidcast_gateway_requests_total{status=~\"5..\"}[7d])) / sum(increase(vidcast_gateway_requests_total[7d]))) / 0.001, 1))", "legendFormat": "remaining"}]
+    },
+    {
+      "id": 2,
+      "title": "Availability — burn rate (1h)",
+      "type": "stat",
+      "gridPos": {"h": 6, "w": 6, "x": 6, "y": 3},
+      "fieldConfig": {"defaults": {"unit": "none", "decimals": 1,
+        "thresholds": {"steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 1}, {"color": "red", "value": 14}]}}},
+      "options": {"colorMode": "background", "reduceOptions": {"calcs": ["last"]}},
+      "targets": [{"expr": "slo:availability:burnrate1h", "legendFormat": "1h burn"}]
+    },
+    {
+      "id": 3,
+      "title": "Availability — hrs to exhaustion (proj.)",
+      "type": "stat",
+      "gridPos": {"h": 6, "w": 6, "x": 12, "y": 3},
+      "fieldConfig": {"defaults": {"unit": "h", "decimals": 1,
+        "thresholds": {"steps": [{"color": "red", "value": null}, {"color": "yellow", "value": 72}, {"color": "green", "value": 720}]}}},
+      "options": {"colorMode": "background", "reduceOptions": {"calcs": ["last"]}},
+      "targets": [{"expr": "(1 - clamp_max((sum(increase(vidcast_gateway_requests_total{status=~\"5..\"}[7d])) / sum(increase(vidcast_gateway_requests_total[7d]))) / 0.001, 1)) * 720 / clamp_min(slo:availability:burnrate1h, 0.001)", "legendFormat": "hours"}]
+    },
+    {
+      "id": 4,
+      "title": "Availability — burn rate trend",
+      "type": "timeseries",
+      "gridPos": {"h": 6, "w": 6, "x": 18, "y": 3},
+      "fieldConfig": {"defaults": {"unit": "none", "custom": {"drawStyle": "line", "fillOpacity": 10}}},
+      "targets": [
+        {"expr": "slo:availability:burnrate1h", "legendFormat": "1h"},
+        {"expr": "slo:availability:burnrate6h", "legendFormat": "6h"}
+      ]
+    },
+
+    {
+      "id": 5,
+      "title": "Conversion latency — budget remaining (7d)",
+      "type": "stat",
+      "gridPos": {"h": 6, "w": 6, "x": 0, "y": 9},
+      "fieldConfig": {"defaults": {"unit": "percent", "min": 0, "max": 100,
+        "thresholds": {"steps": [{"color": "red", "value": null}, {"color": "yellow", "value": 25}, {"color": "green", "value": 50}]}}},
+      "options": {"colorMode": "background", "reduceOptions": {"calcs": ["last"]}},
+      "targets": [{"expr": "100 * (1 - clamp_max((1 - (sum(increase(vidcast_conversion_duration_seconds_bucket{le=~\"300(\\.0)?\"}[7d])) / sum(increase(vidcast_conversion_duration_seconds_count[7d])))) / 0.05, 1))", "legendFormat": "remaining"}]
+    },
+    {
+      "id": 6,
+      "title": "Conversion latency — burn rate (1h)",
+      "type": "stat",
+      "gridPos": {"h": 6, "w": 6, "x": 6, "y": 9},
+      "fieldConfig": {"defaults": {"unit": "none", "decimals": 1,
+        "thresholds": {"steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 1}, {"color": "red", "value": 14}]}}},
+      "options": {"colorMode": "background", "reduceOptions": {"calcs": ["last"]}},
+      "targets": [{"expr": "slo:conversion_latency:burnrate1h", "legendFormat": "1h burn"}]
+    },
+    {
+      "id": 7,
+      "title": "Conversion latency — hrs to exhaustion (proj.)",
+      "type": "stat",
+      "gridPos": {"h": 6, "w": 6, "x": 12, "y": 9},
+      "fieldConfig": {"defaults": {"unit": "h", "decimals": 1,
+        "thresholds": {"steps": [{"color": "red", "value": null}, {"color": "yellow", "value": 72}, {"color": "green", "value": 720}]}}},
+      "options": {"colorMode": "background", "reduceOptions": {"calcs": ["last"]}},
+      "targets": [{"expr": "(1 - clamp_max((1 - (sum(increase(vidcast_conversion_duration_seconds_bucket{le=~\"300(\\.0)?\"}[7d])) / sum(increase(vidcast_conversion_duration_seconds_count[7d])))) / 0.05, 1)) * 720 / clamp_min(slo:conversion_latency:burnrate1h, 0.001)", "legendFormat": "hours"}]
+    },
+    {
+      "id": 8,
+      "title": "Conversion latency — burn rate trend",
+      "type": "timeseries",
+      "gridPos": {"h": 6, "w": 6, "x": 18, "y": 9},
+      "fieldConfig": {"defaults": {"unit": "none", "custom": {"drawStyle": "line", "fillOpacity": 10}}},
+      "targets": [
+        {"expr": "slo:conversion_latency:burnrate1h", "legendFormat": "1h"},
+        {"expr": "slo:conversion_latency:burnrate6h", "legendFormat": "6h"}
+      ]
+    },
+
+    {
+      "id": 9,
+      "title": "End-to-end success — budget remaining (7d)",
+      "type": "stat",
+      "gridPos": {"h": 6, "w": 6, "x": 0, "y": 15},
+      "fieldConfig": {"defaults": {"unit": "percent", "min": 0, "max": 100,
+        "thresholds": {"steps": [{"color": "red", "value": null}, {"color": "yellow", "value": 25}, {"color": "green", "value": 50}]}}},
+      "options": {"colorMode": "background", "reduceOptions": {"calcs": ["last"]}},
+      "targets": [{"expr": "100 * (1 - clamp_max((1 - (sum(increase(vidcast_notifications_total{status=\"success\"}[7d])) / sum(increase(vidcast_uploads_total[7d])))) / 0.01, 1))", "legendFormat": "remaining"}]
+    },
+    {
+      "id": 10,
+      "title": "End-to-end success — burn rate (1h)",
+      "type": "stat",
+      "gridPos": {"h": 6, "w": 6, "x": 6, "y": 15},
+      "fieldConfig": {"defaults": {"unit": "none", "decimals": 1,
+        "thresholds": {"steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 1}, {"color": "red", "value": 14}]}}},
+      "options": {"colorMode": "background", "reduceOptions": {"calcs": ["last"]}},
+      "targets": [{"expr": "slo:e2e_success:burnrate1h", "legendFormat": "1h burn"}]
+    },
+    {
+      "id": 11,
+      "title": "End-to-end success — hrs to exhaustion (proj.)",
+      "type": "stat",
+      "gridPos": {"h": 6, "w": 6, "x": 12, "y": 15},
+      "fieldConfig": {"defaults": {"unit": "h", "decimals": 1,
+        "thresholds": {"steps": [{"color": "red", "value": null}, {"color": "yellow", "value": 72}, {"color": "green", "value": 720}]}}},
+      "options": {"colorMode": "background", "reduceOptions": {"calcs": ["last"]}},
+      "targets": [{"expr": "(1 - clamp_max((1 - (sum(increase(vidcast_notifications_total{status=\"success\"}[7d])) / sum(increase(vidcast_uploads_total[7d])))) / 0.01, 1)) * 720 / clamp_min(slo:e2e_success:burnrate1h, 0.001)", "legendFormat": "hours"}]
+    },
+    {
+      "id": 12,
+      "title": "End-to-end success — burn rate trend",
+      "type": "timeseries",
+      "gridPos": {"h": 6, "w": 6, "x": 18, "y": 15},
+      "fieldConfig": {"defaults": {"unit": "none", "custom": {"drawStyle": "line", "fillOpacity": 10}}},
+      "targets": [
+        {"expr": "slo:e2e_success:burnrate1h", "legendFormat": "1h"},
+        {"expr": "slo:e2e_success:burnrate6h", "legendFormat": "6h"}
+      ]
+    }
+  ]
+}

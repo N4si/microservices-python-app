@@ -1,0 +1,44 @@
+# Helm values for Kyverno (B2) — tuned for the 2-vCPU demo node, not chart
+# defaults (which request far more for HA).
+#   helm repo add kyverno https://kyverno.github.io/kyverno
+#   helm install kyverno kyverno/kyverno -n kyverno --create-namespace -f k8s/kyverno/values.yaml
+#
+# Four single-replica controllers. Total requests ≈ 125m / 320Mi. Policies
+# themselves (ClusterPolicies) are applied separately via `kubectl apply -k`.
+
+admissionController:
+  replicas: 1
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 150m
+      memory: 256Mi
+
+backgroundController:
+  resources:
+    requests:
+      cpu: 25m
+      memory: 64Mi
+    limits:
+      cpu: 100m
+      memory: 128Mi
+
+reportsController:
+  resources:
+    requests:
+      cpu: 25m
+      memory: 64Mi
+    limits:
+      cpu: 100m
+      memory: 128Mi
+
+cleanupController:
+  resources:
+    requests:
+      cpu: 25m
+      memory: 64Mi
+    limits:
+      cpu: 100m
+      memory: 128Mi

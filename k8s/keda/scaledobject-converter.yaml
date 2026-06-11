@@ -1,0 +1,30 @@
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: converter-scaler
+  namespace: default
+spec:
+  # Targets the CONVERTER deployment ONLY. The gateway is scaled by a separate
+  # HPA (hpa-gateway.yaml) on a DIFFERENT deployment — the two controllers never
+  # share a scaleTargetRef, so they cannot fight over the same replica count.
+  scaleTargetRef:
+    name: converter
+  pollingInterval: 15      # check the queue every 15s
+  cooldownPeriod: 60       # wait 60s after the queue drains before scaling down
+  minReplicaCount: 0       # scale to ZERO when there is no work (the point of KEDA
+                           # here — converters are bursty, CPU-heavy, and idle most
+                           # of the time)
+  maxReplicaCount: 2       # single-node constraint: the 2-vCPU node cannot schedule
+                           # 3 converter replicas at any resource level (datastore
+                           # requests are now scheduler-visible, Sprint 4 gap-fix).
+                           # Horizontal node scaling in production would raise this cap.
+  triggers:
+    - type: rabbitmq
+      metadata:
+        protocol: amqp
+        queueName: video       # scale on the MAIN video queue depth (not retry/dlq)
+        mode: QueueLength
+        value: "5"             # ~5 queued messages per converter replica is the
+                               # target; KEDA adds replicas (up to 3) as it grows
+      authenticationRef:
+        name: keda-rabbitmq-auth

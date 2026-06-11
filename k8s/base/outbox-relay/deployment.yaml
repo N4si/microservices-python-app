@@ -1,0 +1,74 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: outbox-relay
+  labels:
+    app: outbox-relay
+spec:
+  # CRITICAL: exactly ONE replica. The relay is the sole publisher of outbox
+  # events; a second replica would double-publish. Do not scale this up, and do
+  # not let an overlay/HPA touch it. Single replica = single publisher (A1, §3.3).
+  replicas: 1
+  selector:
+    matchLabels:
+      app: outbox-relay
+  strategy:
+    # Recreate (not RollingUpdate): never run two relay pods at once, even briefly
+    # during a rollout, so the single-publisher invariant holds across deploys.
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: outbox-relay
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        # B2 gap-fix: pod-level so it also covers any future init/sidecar
+        # containers. RuntimeDefault blocks ~44 dangerous syscalls (PSS Restricted)
+        # and satisfies the Kyverno require-seccomp-runtime-default policy.
+        seccompProfile:
+          type: RuntimeDefault
+      volumes:
+        # Writable scratch for the /tmp/healthy liveness heartbeat under
+        # readOnlyRootFilesystem (same pattern as converter/notification).
+        - name: tmp-volume
+          emptyDir: {}
+      containers:
+        - name: outbox-relay
+          image: johnbaabalola/outbox-relay:latest
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            # Reuse the gateway's existing credential sources — no new paths.
+            # gateway-secret provides MONGODB_VIDEOS_URI (the outbox lives in the
+            # same `videos` db); rabbitmq-secret provides the broker credentials.
+            - secretRef:
+                name: gateway-secret
+            - secretRef:
+                name: rabbitmq-secret
+          env:
+            - name: PYTHONUNBUFFERED
+              value: "1"
+            - name: OUTBOX_POLL_INTERVAL
+              value: "30"
+          volumeMounts:
+            - name: tmp-volume
+              mountPath: /tmp
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "100m"
+              memory: "128Mi"
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          livenessProbe:
+            exec:
+              command: ["test", "-f", "/tmp/healthy"]
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            failureThreshold: 3

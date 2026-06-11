@@ -1,0 +1,62 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# PROD overlay — mirrors the current live production footprint (the single-node
+# EKS cluster). Replicas are inherited from base unchanged (auth 2, gateway 2,
+# converter 2, notification 2, frontend 1) so `kubectl kustomize overlays/prod`
+# renders ≈ the pre-Kustomize raw manifests (the only intended deltas are the
+# org labels and the resolved frontend image — see k8s/README.md verification).
+#
+# Argo CD (B1) points its auto-sync-OFF "vidcast-prod" Application here:
+# production deploys are gated on a human merging the image-tag-bump PR.
+namespace: default
+
+resources:
+  - ../../base/auth
+  - ../../base/gateway
+  - ../../base/converter
+  - ../../base/notification
+  - ../../base/frontend
+  # A1 outbox relay (single replica). The johnbaabalola/outbox-relay image is
+  # built by CI (John's matrix change); once pushed, add it to the images: list
+  # below with its tag so GitOps (B1) bumps it like the other services.
+  - ../../base/outbox-relay
+  # A2 idempotency claim store (in-cluster Redis, single replica). ElastiCache is
+  # the documented-but-skipped managed alternative (MANAGED_SERVICES.md §5): to
+  # use it, point the consumers' REDIS_HOST at the ElastiCache endpoint and drop
+  # this resource. We keep Redis in-cluster per the cost boundary.
+  - ../../base/redis
+  # I4/P5 nightly mongodump + pg_dump CronJobs → S3 backup bucket. CronJob pods
+  # are short-lived and carry no replica count.
+  - ../../base/backup
+
+# Org/governance labels. These are what Kyverno require-labels (B2) enforces.
+# environment distinguishes prod from dev; managed-by flips to "argocd" in B1.
+labels:
+  - pairs:
+      environment: prod
+      cost-centre: vidcast-portfolio
+      owner: john-baabalola
+      app.kubernetes.io/managed-by: kustomize
+    includeSelectors: false
+    includeTemplates: true
+
+# Image tags are the source of truth for GitOps: the CD pipeline (B1) bumps
+# newTag here via a PR rather than running `kubectl set image`. Backends are
+# Docker Hub; the frontend resolves to this account's ECR (CI does not build it).
+images:
+  - name: johnbaabalola/auth-service
+    newTag: 65f2f57
+  - name: johnbaabalola/gateway-service
+    newTag: 65f2f57
+  - name: johnbaabalola/converter-service
+    newTag: 65f2f57
+  - name: johnbaabalola/notification-service
+    newTag: 65f2f57
+  # outbox-relay is now built by CI (added to the build matrix) and pinned to the
+  # same CI SHA as the other backends — GitOps (B1) bumps newTag here on each build.
+  - name: johnbaabalola/outbox-relay
+    newTag: 65f2f57
+  - name: vidcast-frontend
+    newName: 501562869470.dkr.ecr.eu-west-2.amazonaws.com/vidcast-frontend
+    newTag: d9e4282
